@@ -1,0 +1,28 @@
+# Déploiement de l'API PHARMACORP ERP sur Render (Blueprint : New > Blueprint depuis le dépôt).
+# La base de données (DATABASE_URL) et les secrets JWT sont saisis à la main dans le tableau de bord
+# Render (onglet Environment du service), jamais commités ici.
+services:
+  - type: web
+    name: pharmacorp-erp-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: .
+    buildCommand: npm install && npm run build -w @erp/database && npx prisma generate --schema=packages/database/prisma/schema.prisma && npm run build -w @erp/api
+    startCommand: npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma && npm run db:seed && node apps/api/dist/main.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: QUEUE_MODE
+        value: "off"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: JWT_REFRESH_TTL
+        value: 7d
