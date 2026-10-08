@@ -23,7 +23,10 @@
     "db:seed": "npm run db:seed -w @erp/database"
   },
   "devDependencies": {
-    "typescript": "^5.5.4"
+    "typescript": "5.5.4"
+  },
+  "overrides": {
+    "typescript": "5.5.4"
   },
   "engines": {
     "node": ">=20"
