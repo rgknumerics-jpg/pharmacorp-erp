@@ -1,0 +1,31 @@
+{
+  "name": "erp-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Socle technique du backend centralise (voir ARCHITECTURE.md)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev -w @erp/api",
+    "dev:web": "npm run dev -w @erp/web",
+    "build": "npm run build -w @erp/database && npm run build -w @erp/api && npm run build -w @erp/web",
+    "build:api": "npm run build -w @erp/database && npm run build -w @erp/api",
+    "build:web": "npm run build -w @erp/web",
+    "test": "npm run test -w @erp/api",
+    "test:e2e": "npm run test:e2e -w @erp/api",
+    "lint": "npm run lint -w @erp/api && npm run lint -w @erp/web",
+    "api:plantes": "node ../API/plantes-medicinales/src/server.cjs",
+    "db:generate": "npm run db:generate -w @erp/database",
+    "db:migrate:dev": "npm run db:migrate:dev -w @erp/database",
+    "db:migrate:deploy": "npm run db:migrate:deploy -w @erp/database",
+    "db:seed": "npm run db:seed -w @erp/database"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,69 @@
+name: erp-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: erp
+      POSTGRES_DB: erp_dev
+    ports:
+      # Port hôte 5442 (au lieu de 5432) : une autre infrastructure Docker sans rapport avec ce
+      # projet occupe déjà 5432 sur cette machine (voir README.md, section "Ports").
+      - '5442:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U erp -d erp_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      # Port hôte 6389 (au lieu de 6379), même raison que postgres ci-dessus.
+      - '6389:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # erp_app : role non-superuser/non-BYPASSRLS, requis pour que la Row-Level Security
+      # multi-tenant s'applique reellement (voir packages/database/prisma/migrations/
+      # 20260927095021_least_privilege_app_role). Les migrations tournent avec le role "erp".
+      DATABASE_URL: postgresql://erp_app:erp_app@postgres:5432/erp_dev?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/web.Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3000
+    restart: unless-stopped
+    ports:
+      - '5173:80'
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:

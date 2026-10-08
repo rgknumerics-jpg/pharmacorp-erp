@@ -1,0 +1,26 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*.local
+*.log
+.DS_Store
+Thumbs.db
+/apps/*/dist
+/packages/*/dist
+/packages/database/prisma/dev.db
+.turbo/
+*.tsbuildinfo
+
+# base de donnees locale et artefacts de build/empaquetage (jamais dans le depot)
+.local-db/
+.scratch-deck/
+tools/dist/build/
+tools/dist/out/
+tools/dist/keys/
+*.local.txt
+config.json
+licences-generees.csv
+*.key
+

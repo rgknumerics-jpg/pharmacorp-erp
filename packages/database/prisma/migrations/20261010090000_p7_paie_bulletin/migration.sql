@@ -1,0 +1,1 @@
+ALTER TABLE "employees" ADD COLUMN "matricule" TEXT, ADD COLUMN "family_situation" TEXT, ADD COLUMN "seniority_rate" DOUBLE PRECISION NOT NULL DEFAULT 0, ADD COLUMN "fixed_earnings" JSONB NOT NULL DEFAULT '[]', ADD COLUMN "fixed_allowances" JSONB NOT NULL DEFAULT '[]';

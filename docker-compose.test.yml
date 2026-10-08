@@ -1,0 +1,32 @@
+name: erp-platform-test
+
+# Environnement de test isole du dev (ARCHITECTURE.md section 17/22) : ports differents,
+# volumes non partages, jetable. Usage : docker compose -f docker-compose.test.yml up -d
+# puis DATABASE_URL/REDIS_* de .env.test doivent pointer vers ces ports.
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: erp
+      POSTGRES_DB: erp_test
+    ports:
+      - '5433:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U erp -d erp_test']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-test:
+    image: redis:7-alpine
+    ports:
+      - '6380:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10

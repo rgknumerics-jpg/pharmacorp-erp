@@ -1,0 +1,1662 @@
+// Schema du socle technique. Voir ARCHITECTURE.md section 6 (base de donnees) et section 10 (multi-tenant).
+// Les modules metier P1/P2 (catalogue, stock, ventes, achats, OCR) sont decrits en bas de ce fichier.
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" = dev local (Windows/macOS/glibc) ; "linux-musl-openssl-3.0.x" = runtime Docker
+  // (node:20-alpine, OpenSSL 3.x). Sans cette 2e cible, le moteur Prisma ne se charge pas dans
+  // le conteneur (bug trouve pendant le build de infrastructure/docker/api.Dockerfile le
+  // 2026-09-27 : "Error loading shared library libssl.so.1.1: No such file or directory").
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Une entreprise cliente de la plateforme (ARCHITECTURE.md section 10 : tenant_id partage + RLS).
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  country   String   @default("CG")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  memberships        Membership[]
+  roles              Role[]
+  refreshTokens      RefreshToken[]
+  auditLogs          AuditLog[]
+  categories         Category[]
+  products           Product[]
+  suppliers          Supplier[]
+  customers          Customer[]
+  lots               Lot[]
+  movements          InventoryMovement[]
+  purchaseOrders     PurchaseOrder[]
+  purchaseOrderItems PurchaseOrderItem[]
+  goodsReceipts      GoodsReceipt[]
+  goodsReceiptItems  GoodsReceiptItem[]
+  sales              Sale[]
+  saleItems          SaleItem[]
+  payments           Payment[]
+  counters           TenantCounter[]
+  ocrDocuments       OcrDocument[]
+  accounts           Account[]
+  journalEntries     JournalEntry[]
+  journalLines       JournalLine[]
+  outboxEvents       OutboxEvent[]
+  fiscalInvoices     FiscalInvoice[]
+  companyProfile     CompanyProfile?
+  saleTickets        SaleTicket[]
+  supplierCatalogItems SupplierCatalogItem[]
+  supplierClaims     SupplierClaim[]
+  customerAccounts   CustomerAccount[]
+  couriers           Courier[]
+  onlineOrders       OnlineOrder[]
+  portalNotifications PortalNotification[]
+  chatMessages       ChatMessage[]
+  chatReads          ChatRead[]
+  destructions       Destruction[]
+  clockStations      ClockStation[]
+  timeClocks         TimeClock[]
+  companyDocuments   CompanyDocument[]
+  taxFilings         TaxFiling[]
+  employees          Employee[]
+  payrollRuns        PayrollRun[]
+  payslips           Payslip[]
+  insurers           Insurer[]
+  prescriptions      Prescription[]
+  supplierInvoices   SupplierInvoice[]
+  gardePeriods       GardePeriod[]
+  trainingItems      TrainingItem[]
+  trainingAttempts   TrainingAttempt[]
+  backupSetting      BackupSetting?
+  backupRecords      BackupRecord[]
+  inventorySessions  InventorySession[]
+  inventoryCounts    InventoryCount[]
+  promotions         Promotion[]
+  leaveRequests      LeaveRequest[]
+  shifts             Shift[]
+  importJobs         ImportJob[]
+
+  productPhotos ProductPhoto[]
+  cashSessions  CashSession[]
+  cashExpenses  CashExpense[]
+  cashReserveMoves CashReserveMove[]
+  cashVariances CashVariance[]
+
+  depots Depot[]
+
+  @@map("tenants")
+}
+
+/// Identite utilisateur unique, potentiellement membre de plusieurs tenants (ARCHITECTURE.md section 8).
+model User {
+  /// Signature manuscrite (image PNG en data URL) saisie a la creation du compte.
+  signature    String?
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fullName     String   @map("full_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  mfaEnabled   Boolean  @default(false) @map("mfa_enabled")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  memberships   Membership[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+/// Role RBAC, toujours porte par un tenant (ARCHITECTURE.md section 9).
+model Role {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  /// Nom affiché (modifiable par l'administrateur) ; `name` reste l'identifiant technique.
+  label        String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+  memberships Membership[]
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+/// Catalogue global des permissions (ex: users.read, audit.read). Pas de tenant_id : c'est un referentiel partage.
+model Permission {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique
+  description String?
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+/// Rattachement d'un utilisateur a un tenant avec un role donne (ARCHITECTURE.md section 10, multi-entreprise).
+model Membership {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  roleId    String   @map("role_id") @db.Uuid
+  isActive  Boolean  @default(true) @map("is_active")
+  /// Code personnel (hache) qui deverrouille les postes de caisse et identifie la personne qui travaille.
+  posPinHash String?  @map("pos_pin_hash")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  @@unique([tenantId, userId])
+  @@map("memberships")
+}
+
+/// Jetons de rafraichissement, scopes par tenant actif (ARCHITECTURE.md section 8 : revocation immediate).
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+/// Journal d'audit (ARCHITECTURE.md section 21 : journalisation systematique des actions sensibles).
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  metadata   Json?
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+// =====================================================================================
+// Modules metier P1/P2 (ARCHITECTURE.md sections 3, 6, 11, 12, 17) : catalogue, stock par lot
+// (FEFO), clients, achats / receptions, ventes (POS) et paiements, OCR documentaire.
+// Toutes les tables portent tenant_id et sont protegees par Row-Level Security (voir la
+// migration p1_business_core). Les montants sont des entiers en FCFA (pas de sous-unite).
+// =====================================================================================
+
+enum LotStatus {
+  available
+  pending_review // lot a faible confiance OCR : bloque a la vente jusqu'a validation par un 2e role
+  blocked
+}
+
+enum MovementType {
+  reception
+  sale
+  sale_return
+  adjustment
+  loss
+  expiry_writeoff
+  opening // stock initial repris d'un autre logiciel
+  inventory // ecart constate a l'inventaire
+  unpack // deconditionnement (boite -> unites) et reconditionnement
+  transfer // transfert entre depots (reserve -> comptoir...)
+}
+
+enum PurchaseOrderStatus {
+  draft
+  ordered
+  partially_received
+  received
+  cancelled
+}
+
+enum SaleStatus {
+  awaiting_payment // un paiement Mobile Money est en attente de confirmation : rien n'est remis
+  completed
+  void
+}
+
+enum PaymentMethod {
+  cash
+  card
+  mtn_momo
+  airtel_money
+  credit
+  other
+  cheque
+  transfer
+  insurer // part prise en charge par un organisme (tiers payant)
+  loyalty // points de fidelite
+  store_credit // avoir client
+}
+
+enum PaymentStatus {
+  pending_confirmation
+  confirmed
+  failed
+  refunded
+}
+
+enum OcrKind {
+  delivery_note
+  invoice
+  expiry_label
+}
+
+enum OcrStatus {
+  pending_review
+  validated
+  rejected
+}
+
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([tenantId, name])
+  @@map("categories")
+}
+
+model Product {
+  id                   String   @id @default(uuid()) @db.Uuid
+  tenantId             String   @map("tenant_id") @db.Uuid
+  sku                  String
+  barcode              String?
+  name                 String
+  dci                  String?
+  form                 String?
+  dosage               String?
+  laboratory           String?
+  categoryId           String?  @map("category_id") @db.Uuid
+  unit                 String   @default("boite")
+  salePrice            Int      @default(0) @map("sale_price")
+  /// Donnee sensible : filtree cote serveur selon la permission cost.read (ARCHITECTURE.md section 7).
+  purchasePrice        Int      @default(0) @map("purchase_price")
+  vatRate              Int      @default(0) @map("vat_rate")
+  /// Prix libre : le prix de vente est saisi a la caisse (produits dont le prix n'est pas reglemente).
+  priceFree            Boolean  @default(false) @map("price_free")
+  trackLots            Boolean  @default(true) @map("track_lots")
+  minStock             Int      @default(0) @map("min_stock")
+  /// Tolerance de survente hors ligne (ARCHITECTURE.md section 11) : nombre d'unites vendables sans stock.
+  oversellTolerance    Int      @default(0) @map("oversell_tolerance")
+  prescriptionRequired Boolean  @default(false) @map("prescription_required")
+  /// Code article par grossiste (CIP LABOREX, UBIPHARM, SEP...) : { [supplierId]: code }. Sert aux commandes PharmaML.
+  supplierCodes        Json     @default("{}") @map("supplier_codes")
+  /// Colisage : unites par carton a la reception (ex. 10 boites par carton).
+  packSize             Int      @default(1) @map("pack_size")
+  /// Deconditionnement (loi 10/2010) : unites par boite et prix de vente a l'unite.
+  unitsPerBox          Int?     @map("units_per_box")
+  unitSalePrice        Int?     @map("unit_sale_price")
+  /// Produit 'a l'unite' issu du deconditionnement de ce produit (cree a la premiere ouverture de boite).
+  unitProductId        String?  @map("unit_product_id") @db.Uuid
+  /// normal | froid | stupefiant | psychotrope | photosensible | inflammable
+  /// Categorie de prix (coefficient applique au prix d'achat) : specialite, generique, parapharmacie...
+  priceCategory        String?  @map("price_category")
+  storage              String   @default("normal")
+  location             String?
+  safetyStock          Int      @default(0) @map("safety_stock")
+  reorderQty           Int      @default(0) @map("reorder_qty")
+  /// Visible dans la boutique en ligne / l'application client (choisi produit par produit ou par categorie).
+  onlineVisible        Boolean  @default(false) @map("online_visible")
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category  Category?           @relation(fields: [categoryId], references: [id])
+  lots      Lot[]
+  movements InventoryMovement[]
+  poItems   PurchaseOrderItem[]
+  saleItems SaleItem[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId, name])
+  @@index([tenantId, barcode])
+  @@map("products")
+}
+
+model Supplier {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  name            String
+  phone           String?
+  email           String?
+  address         String?
+  notes           String?
+  /// Conditions de paiement : 0 = comptant ; sinon nombre de jours apres la facture.
+  paymentTermDays Int      @default(0) @map("payment_term_days")
+  /// Delai de livraison annonce (jours), utilise tant que l'historique est insuffisant.
+  leadTimeDays    Int      @default(3) @map("lead_time_days")
+  /// Abreviation imprimee sur les etiquettes (rappel de lot : a quel fournisseur appartenait ce stock).
+  abbreviation    String?
+  /// Personnes a contacter chez le fournisseur : [{ name, role, phone, email, note }].
+  contacts        Json     @default("[]")
+  /// Format du fichier de commande attendu par son extranet (modele appris d'un fichier importe).
+  exportFormat    Json     @default("{}") @map("export_format")
+  /// Grossiste repartiteur (Laborex, Ubipharm, CEP...) : possede un catalogue de CIP.
+  isWholesaler    Boolean  @default(false) @map("is_wholesaler")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+  invoices       SupplierInvoice[]
+  receipts       GoodsReceipt[]
+
+  @@index([tenantId, name])
+  @@map("suppliers")
+}
+
+model Customer {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  name            String
+  phone           String?
+  email           String?
+  /// Plafond de credit autorise, et solde actuellement du (ARCHITECTURE.md section 11 : plafond verifie a la vente).
+  creditLimit     Int       @default(0) @map("credit_limit")
+  creditBalance   Int       @default(0) @map("credit_balance")
+  /// Delai de paiement accorde (jours) : sert a la balance agee et aux relances.
+  paymentTermDays Int       @default(30) @map("payment_term_days")
+  /// Avoir du a ce client (montant qu'il peut utiliser en paiement).
+  storeCredit     Int       @default(0) @map("store_credit")
+  loyaltyPoints   Int       @default(0) @map("loyalty_points")
+  /// particulier | entreprise | assure | personnel
+  kind            String    @default("particulier")
+  address         String?
+  city            String?
+  birthDate       DateTime? @map("birth_date") @db.Date
+  company         String?
+  insurerId       String?   @map("insurer_id") @db.Uuid
+  insuranceNumber String?   @map("insurance_number")
+  /// Accepte de recevoir des messages WhatsApp (rappels, promotions) : consentement explicite.
+  whatsappOptIn   Boolean   @default(false) @map("whatsapp_opt_in")
+  notes           String?
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sales  Sale[]
+
+  @@index([tenantId, name])
+  @@index([tenantId, phone])
+  @@map("customers")
+}
+
+model Lot {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  productId     String    @map("product_id") @db.Uuid
+  lotNumber     String    @map("lot_number")
+  expiryDate    DateTime? @map("expiry_date") @db.Date
+  status        LotStatus @default(available)
+  createdById   String?   @map("created_by_id") @db.Uuid
+  validatedById String?   @map("validated_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product      Product             @relation(fields: [productId], references: [id])
+  movements    InventoryMovement[]
+  saleItems    SaleItem[]
+  receiptItems GoodsReceiptItem[]
+
+  @@unique([tenantId, productId, lotNumber])
+  @@index([tenantId, expiryDate])
+  @@index([productId])
+  @@map("lots")
+}
+
+/// Journal de mouvements en ajout seul : le stock est TOUJOURS la somme des mouvements, jamais un solde ecrit
+/// (ARCHITECTURE.md section 6). `idempotencyKey` rend une operation rejouee (hors ligne) sans effet.
+model InventoryMovement {
+  id             String       @id @default(uuid()) @db.Uuid
+  tenantId       String       @map("tenant_id") @db.Uuid
+  productId      String       @map("product_id") @db.Uuid
+  lotId          String?      @map("lot_id") @db.Uuid
+  /// Depot du mouvement ; null = depot de vente (comptoir / rayons), seul depot ou la caisse preleve.
+  depotId        String?      @map("depot_id") @db.Uuid
+  quantity       Int
+  type           MovementType
+  refType        String?      @map("ref_type")
+  refId          String?      @map("ref_id")
+  reason         String?
+  idempotencyKey String?      @map("idempotency_key")
+  createdById    String?      @map("created_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  lot     Lot?    @relation(fields: [lotId], references: [id])
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, productId, createdAt])
+  @@index([tenantId, lotId])
+  @@map("inventory_movements")
+}
+
+model PurchaseOrder {
+  id          String              @id @default(uuid()) @db.Uuid
+  tenantId    String              @map("tenant_id") @db.Uuid
+  number      String
+  supplierId  String              @map("supplier_id") @db.Uuid
+  status      PurchaseOrderStatus @default(draft)
+  notes       String?
+  expectedAt  DateTime?           @map("expected_at") @db.Date
+  createdById String?             @map("created_by_id") @db.Uuid
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier Supplier            @relation(fields: [supplierId], references: [id])
+  items    PurchaseOrderItem[]
+  receipts GoodsReceipt[]
+
+  @@unique([tenantId, number])
+  @@index([supplierId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String @id @default(uuid()) @db.Uuid
+  tenantId        String @map("tenant_id") @db.Uuid
+  purchaseOrderId String @map("purchase_order_id") @db.Uuid
+  productId       String @map("product_id") @db.Uuid
+  quantity        Int
+  unitCost        Int    @default(0) @map("unit_cost")
+  receivedQty     Int    @default(0) @map("received_qty")
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+
+  @@map("purchase_order_items")
+}
+
+model GoodsReceipt {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  number          String
+  purchaseOrderId String?  @map("purchase_order_id") @db.Uuid
+  supplierId      String?  @map("supplier_id") @db.Uuid
+  /// Numero du bon de livraison / de la facture fournisseur.
+  supplierRef     String?  @map("supplier_ref")
+  ocrDocumentId   String?  @map("ocr_document_id") @db.Uuid
+  receivedById    String?  @map("received_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder?     @relation(fields: [purchaseOrderId], references: [id])
+  supplier      Supplier?          @relation(fields: [supplierId], references: [id])
+  items         GoodsReceiptItem[]
+
+  @@unique([tenantId, number])
+  @@index([supplierId])
+  @@index([purchaseOrderId])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptItem {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  receiptId  String    @map("receipt_id") @db.Uuid
+  productId  String    @map("product_id") @db.Uuid
+  lotId      String?   @map("lot_id") @db.Uuid
+  quantity   Int
+  unitCost   Int       @default(0) @map("unit_cost")
+  expiryDate DateTime? @map("expiry_date") @db.Date
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  receipt GoodsReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  lot     Lot?         @relation(fields: [lotId], references: [id])
+  @@index([receiptId])
+  @@index([productId])
+  @@map("goods_receipt_items")
+}
+
+model Sale {
+  id             String     @id @default(uuid()) @db.Uuid
+  tenantId       String     @map("tenant_id") @db.Uuid
+  number         String
+  customerId     String?    @map("customer_id") @db.Uuid
+  status         SaleStatus @default(completed)
+  subtotal       Int        @default(0)
+  discount       Int        @default(0)
+  vatAmount      Int        @default(0) @map("vat_amount")
+  total          Int        @default(0)
+  paidAmount     Int        @default(0) @map("paid_amount")
+  /// Cle d'idempotence fournie par le client (UUID genere hors ligne) : un rejeu ne cree jamais un doublon.
+  idempotencyKey String?    @map("idempotency_key")
+  cashierId      String?    @map("cashier_id") @db.Uuid
+  /// V = vente, A = assurance (tiers payant), B = bon de pharmacie (credit).
+  kind           String     @default("V")
+  /// Vendeur qui a saisi la vente (ticket envoye a la caisse) ; cashierId = qui a encaisse.
+  sellerId       String?    @map("seller_id") @db.Uuid
+  ticketId       String?    @map("ticket_id") @db.Uuid
+  voidReason     String?    @map("void_reason")
+  /// Vente reprise d'un ancien logiciel : historique (prevision, statistiques), sans mouvement de stock ni ecriture.
+  imported       Boolean    @default(false)
+  voidedAt       DateTime?  @map("voided_at")
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer?  @relation(fields: [customerId], references: [id])
+  items    SaleItem[]
+  payments Payment[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, createdAt])
+  @@index([customerId])
+  @@map("sales")
+}
+
+model SaleItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  saleId    String  @map("sale_id") @db.Uuid
+  productId String  @map("product_id") @db.Uuid
+  lotId     String? @map("lot_id") @db.Uuid
+  quantity  Int
+  unitPrice Int     @map("unit_price")
+  discount  Int     @default(0)
+  vatRate   Int     @default(0) @map("vat_rate")
+  lineTotal Int     @map("line_total")
+  /// Cout d'achat fige au moment de la vente (marge fiable meme si le prix d'achat change ensuite).
+  unitCost  Int     @default(0) @map("unit_cost")
+  note      String?
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  lot     Lot?    @relation(fields: [lotId], references: [id])
+
+  @@index([tenantId, productId])
+  @@index([saleId])
+  @@map("sale_items")
+}
+
+/// Chaque tentative de paiement a son propre statut (ARCHITECTURE.md section 12) : jamais un booleen "paye".
+model Payment {
+  id          String        @id @default(uuid()) @db.Uuid
+  tenantId    String        @map("tenant_id") @db.Uuid
+  saleId      String        @map("sale_id") @db.Uuid
+  method      PaymentMethod
+  amount      Int
+  status      PaymentStatus
+  reference   String?
+  /// Tiers payant : organisme qui doit cette part.
+  insurerId   String?       @map("insurer_id") @db.Uuid
+  confirmedAt DateTime?     @map("confirmed_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sale   Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([tenantId, reference])
+  @@index([saleId])
+  @@map("payments")
+}
+
+model TenantCounter {
+  tenantId String @map("tenant_id") @db.Uuid
+  key      String
+  value    Int    @default(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, key])
+  @@map("tenant_counters")
+}
+
+/// Document numerise (bon de livraison, facture fournisseur, etiquette de peremption) et son analyse OCR.
+/// Rien n'entre en stock sans validation humaine ; un document a faible confiance exige un 2e valideur
+/// (ARCHITECTURE.md section 17).
+model OcrDocument {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  kind         OcrKind
+  status       OcrStatus @default(pending_review)
+  engine       String
+  rawText      String    @map("raw_text")
+  parsed       Json
+  confidence   Float
+  fileName     String?   @map("file_name")
+  image        Bytes?
+  createdById  String?   @map("created_by_id") @db.Uuid
+  reviewedById String?   @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime? @map("reviewed_at")
+  receiptId    String?   @map("receipt_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, createdAt])
+  @@map("ocr_documents")
+}
+
+// =====================================================================================
+// P3 : comptabilite SYSCOHADA (ecritures generees par evenements, outbox), facturation SFEC
+// (mode degrade), webhooks Mobile Money. ARCHITECTURE.md sections 2, 12, 13, 14.
+// =====================================================================================
+
+enum AccountType {
+  asset
+  liability
+  equity
+  income
+  expense
+}
+
+enum OutboxStatus {
+  pending
+  processed
+  failed
+}
+
+enum FiscalStatus {
+  pending // en file, jamais encore soumise
+  provisional // facture provisoire emise : SFEC indisponible, certification differee automatique
+  certified
+  rejected // refusee par l'administration : correction humaine requise
+}
+
+model Account {
+  id        String      @id @default(uuid()) @db.Uuid
+  tenantId  String      @map("tenant_id") @db.Uuid
+  code      String
+  name      String
+  type      AccountType
+  isActive  Boolean     @default(true) @map("is_active")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@map("accounts")
+}
+
+/// Ecriture comptable. Jamais modifiee une fois creee : une erreur se corrige par contre-passation (reversalOfId).
+model JournalEntry {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  number       String
+  journalCode  String   @map("journal_code")
+  date         DateTime @db.Date
+  label        String
+  sourceType   String?  @map("source_type")
+  sourceId     String?  @map("source_id")
+  /// Cle d'idempotence (evenement outbox + nature) : un evenement retraite ne cree jamais une 2e ecriture.
+  sourceKey    String?  @map("source_key")
+  reversalOfId String?  @map("reversal_of_id") @db.Uuid
+  createdById  String?  @map("created_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lines  JournalLine[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, sourceKey])
+  @@index([tenantId, date])
+  @@index([tenantId, sourceType, sourceId])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id          String  @id @default(uuid()) @db.Uuid
+  tenantId    String  @map("tenant_id") @db.Uuid
+  entryId     String  @map("entry_id") @db.Uuid
+  accountCode String  @map("account_code")
+  debit       Int     @default(0)
+  credit      Int     @default(0)
+  label       String?
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entry  JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, accountCode])
+  @@map("journal_lines")
+}
+
+/// Evenements metier ecrits dans la MEME transaction que l'operation (pattern outbox) puis traites de facon asynchrone.
+model OutboxEvent {
+  id          String       @id @default(uuid()) @db.Uuid
+  tenantId    String       @map("tenant_id") @db.Uuid
+  type        String
+  payload     Json
+  status      OutboxStatus @default(pending)
+  attempts    Int          @default(0)
+  lastError   String?      @map("last_error")
+  processedAt DateTime?    @map("processed_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, createdAt])
+  @@map("outbox_events")
+}
+
+/// Facture normalisee SFEC liee a une vente. La vente n'attend JAMAIS la certification (ARCHITECTURE.md section 13).
+model FiscalInvoice {
+  id               String       @id @default(uuid()) @db.Uuid
+  tenantId         String       @map("tenant_id") @db.Uuid
+  saleId           String       @map("sale_id") @db.Uuid
+  /// invoice = facture ; credit_note = avoir emis a l'annulation d'une vente deja facturee
+  kind             String       @default("invoice")
+  number           String
+  status           FiscalStatus @default(pending)
+  payload          Json
+  attempts         Int          @default(0)
+  nextAttemptAt    DateTime     @default(now()) @map("next_attempt_at")
+  certificationRef String?      @map("certification_ref")
+  certificationQr  String?      @map("certification_qr")
+  certifiedAt      DateTime?    @map("certified_at")
+  lastError        String?      @map("last_error")
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, saleId, kind])
+  @@index([tenantId, status, nextAttemptAt])
+  @@map("fiscal_invoices")
+}
+
+// =====================================================================================
+// P4 : pilotage -- profil legal (facultatif), calendrier fiscal et social avec rappels, paie (CNSS, CAMU, TUS, ITS),
+// pharmacie (ordonnances, tiers payant, delais de paiement des clients a credit).
+// =====================================================================================
+
+/// Informations legales de la structure : TOUTES facultatives a la creation du compte ; completees quand on veut.
+model CompanyProfile {
+  tenantId              String   @id @map("tenant_id") @db.Uuid
+  legalName             String?  @map("legal_name")
+  legalForm             String?  @map("legal_form")
+  niu                   String?
+  rccm                  String?
+  practiceAuthorization String?  @map("practice_authorization")
+  cnssEmployerNumber    String?  @map("cnss_employer_number")
+  patenteNumber         String?  @map("patente_number")
+  address               String?
+  city                  String?
+  phone                 String?
+  email                 String?
+  /// Parametres fiscaux qui determinent les obligations applicables (calendrier).
+  taxRegime             String   @default("reel") @map("tax_regime") // reel | forfait
+  incomeTax             String   @default("IS") @map("income_tax") // IS (societe) | IBA (entreprise individuelle)
+  vatRegistered         Boolean  @default(true) @map("vat_registered")
+  employeesCount        Int      @default(0) @map("employees_count")
+  zone                  String   @default("centre") // centre | peripherie (TOL sur salaires)
+  /// Locataire des locaux (taxe immobiliere = 1/12 du loyer annuel, chaque mois) et loyer annuel.
+  rentsPremises         Boolean  @default(true) @map("rents_premises")
+  annualRent            Int      @default(0) @map("annual_rent")
+  /// Proprietaire d'immeubles (CFPB / CFPNB, IRF).
+  ownsProperty          Boolean  @default(false) @map("owns_property")
+  fiscalYearEndMonth    Int      @default(12) @map("fiscal_year_end_month")
+  /// Pieces justificatives deposees (cle -> { fileName, uploadedAt }) ; jamais exigees.
+  documents             Json     @default("{}")
+  /// Parametres de paie propres a l'etablissement (taux, plafonds, bareme ITS) ; null = valeurs par defaut.
+  payrollParameters     Json?    @map("payroll_parameters")
+  /// Lien avec l'application Pharmacies de garde (synchronisation des semaines de garde).
+  gardesPharmacyId      String?  @map("gardes_pharmacy_id")
+  /// Habillage : logo (data URL), slogan, messages de ticket, modeles de ticket / bon de pharmacie / etiquette.
+  branding              Json     @default("{}")
+  /// Fidelite : 1 point par tranche de `loyaltySpendPerPoint` FCFA ; 1 point vaut `loyaltyPointValue` FCFA.
+  loyaltyEnabled        Boolean  @default(false) @map("loyalty_enabled")
+  loyaltySpendPerPoint  Int      @default(1000) @map("loyalty_spend_per_point")
+  loyaltyPointValue     Int      @default(10) @map("loyalty_point_value")
+  /// Destinataires des alertes WhatsApp : [{ name, phone, categories }].
+  alertRecipients       Json     @default("[]") @map("alert_recipients")
+  /// Taux de TVA proposes sur la fiche produit : [{ label, rate }].
+  vatRates              Json     @default("[{\"label\":\"Exonéré\",\"rate\":0},{\"label\":\"TVA 18 %\",\"rate\":18}]") @map("vat_rates")
+  /// Coefficients de prix de vente : prix achat x coef (hors TVA / avec TVA).
+  /// Taux de TVA visibles par role : { [roleId]: number[] } ; role absent = tout voir. Regle par l'administrateur.
+  /// Categories de prix : [{ key, label, coefficient }] -- prix de vente = achat x coefficient, arrondi.
+  priceCategories       Json     @default("[]") @map("price_categories")
+  /// Arrondi du prix de vente calcule (multiple superieur, en FCFA).
+  priceRounding         Int      @default(5) @map("price_rounding")
+  /// Fournisseurs visibles par role : { [roleId]: supplierId[] } (produits portant un code de ces fournisseurs).
+  supplierVisibility    Json     @default("{}") @map("supplier_visibility")
+  /// Depots visibles par role : { [roleId]: (depotId | 'main')[] }.
+  depotVisibility       Json     @default("{}") @map("depot_visibility")
+  vatVisibility         Json     @default("{}") @map("vat_visibility")
+  /// Reglages generaux : politique de caisse, verrouillage des postes, listes (formes, rayons), champs du ticket, catalogue en ligne.
+  settings              Json     @default("{}")
+  priceCoefficients     Json     @default("{\"exempt\":1.41,\"taxed\":1.6}") @map("price_coefficients")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("company_profiles")
+}
+
+model CompanyDocument {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  key          String
+  fileName     String   @map("file_name")
+  mimeType     String   @map("mime_type")
+  data         Bytes
+  /// Libelle des documents libres (cle `custom_...`) deposes progressivement.
+  label        String?
+  uploadedById String?  @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@map("company_documents")
+}
+
+/// Suivi d'une echeance fiscale ou sociale (une occurrence datee d'une obligation du calendrier).
+model TaxFiling {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  obligation String
+  period     String
+  dueDate    DateTime  @map("due_date") @db.Date
+  status     String    @default("todo") // todo | filed | paid
+  amount     Int?
+  reference  String?
+  filedAt    DateTime? @map("filed_at")
+  filedById  String?   @map("filed_by_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, obligation, period])
+  @@map("tax_filings")
+}
+
+model Employee {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  fullName        String    @map("full_name")
+  jobTitle        String?   @map("job_title")
+  category        String?
+  cnssNumber      String?   @map("cnss_number")
+  niu             String?
+  phone           String?
+  hireDate        DateTime? @map("hire_date") @db.Date
+  baseSalary      Int       @map("base_salary")
+  contractType    String?   @map("contract_type") // CDI | CDD | stage | prestataire
+  contractEnd     DateTime? @map("contract_end") @db.Date
+  /// Parts du quotient familial (ITS) : 1 celibataire, +1 marie, +0,5 par enfant a charge (a confirmer par le comptable).
+  taxParts        Float     @default(1) @map("tax_parts")
+  matricule       String?
+  familySituation String?   @map("family_situation")
+  /// Anciennete en % du salaire de base (ex. 6 % -> 65 700 x 6 % = 3 942).
+  seniorityRate   Float     @default(0) @map("seniority_rate")
+  /// Primes fixes soumises reconduites chaque mois : [{ label, amount }].
+  fixedEarnings   Json      @default("[]") @map("fixed_earnings")
+  /// Indemnites fixes non soumises (allocations familiales, transport, rations).
+  fixedAllowances Json      @default("[]") @map("fixed_allowances")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payslips Payslip[]
+
+  @@map("employees")
+}
+
+model PayrollRun {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  period        String // AAAA-MM
+  status        String    @default("draft") // draft | validated
+  totals        Json      @default("{}")
+  parameters    Json      @default("{}")
+  validatedAt   DateTime? @map("validated_at")
+  validatedById String?   @map("validated_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payslips Payslip[]
+
+  @@unique([tenantId, period])
+  @@map("payroll_runs")
+}
+
+model Payslip {
+  id         String @id @default(uuid()) @db.Uuid
+  tenantId   String @map("tenant_id") @db.Uuid
+  runId      String @map("run_id") @db.Uuid
+  employeeId String @map("employee_id") @db.Uuid
+  gross      Int
+  bonuses    Int    @default(0)
+  net        Int
+  /// Detail du calcul (cotisations salariales, patronales, ITS, TUS...) fige a la validation.
+  detail     Json
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  run      PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employee Employee   @relation(fields: [employeeId], references: [id])
+
+  @@unique([runId, employeeId])
+  @@map("payslips")
+}
+
+/// Organisme payeur (assurance, mutuelle, employeur) pour le tiers payant.
+model Insurer {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  name            String
+  coverageRate    Int      @default(80) @map("coverage_rate")
+  paymentTermDays Int      @default(60) @map("payment_term_days")
+  balance         Int      @default(0)
+  phone           String?
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("insurers")
+}
+
+/// Registre des ordonnances : tracabilite de la delivrance ligne par ligne (ARCHITECTURE.md section 17).
+model Prescription {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  saleId        String?  @map("sale_id") @db.Uuid
+  number        String
+  patientName   String   @map("patient_name")
+  patientPhone  String?  @map("patient_phone")
+  prescriber    String
+  prescriberRef String?  @map("prescriber_ref")
+  facility      String?
+  prescribedAt  DateTime @map("prescribed_at") @db.Date
+  notes         String?
+  recordedById  String?  @map("recorded_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, number])
+  @@index([tenantId, patientName])
+  @@map("prescriptions")
+}
+
+// =====================================================================================
+// P5 : aide a l'achat (factures fournisseurs et echeances), semaines de garde, formation des equipes, sauvegardes.
+// =====================================================================================
+
+/// Facture fournisseur a payer : echeance saisie manuellement (ou calculee depuis les conditions du fournisseur).
+model SupplierInvoice {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  supplierId String    @map("supplier_id") @db.Uuid
+  receiptId  String?   @map("receipt_id") @db.Uuid
+  number     String
+  issueDate  DateTime  @map("issue_date") @db.Date
+  dueDate    DateTime  @map("due_date") @db.Date
+  amount     Int
+  paidAmount Int       @default(0) @map("paid_amount")
+  status     String    @default("open") // open | paid
+  notes      String?
+  paidAt     DateTime? @map("paid_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([tenantId, status, dueDate])
+  @@index([supplierId])
+  @@map("supplier_invoices")
+}
+
+/// Semaine (ou periode) de garde de l'officine : la demande augmente, le stock doit etre renforce a l'avance.
+model GardePeriod {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+  /// Hausse de demande attendue pendant la garde (%), ajustable apres chaque garde.
+  upliftPct Int      @default(50) @map("uplift_pct")
+  note      String?
+  source    String   @default("manual") // manual | gardes (synchronise depuis Pharmacies de garde)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startDate])
+  @@map("garde_periods")
+}
+
+/// Contenu de formation (quiz ou conseil). Rien n'est montre aux auxiliaires avant validation par un pharmacien.
+model TrainingItem {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  kind          String // quiz | tip
+  topic         String // vente | peremption | bonnes_pratiques | conseil_associe | accueil | caisse
+  title         String
+  body          String
+  options       Json      @default("[]")
+  answerIndex   Int?      @map("answer_index")
+  explanation   String?
+  status        String    @default("draft") // draft | validated | archived
+  source        String    @default("pharmacorp") // pharmacorp | officine
+  createdById   String?   @map("created_by_id") @db.Uuid
+  validatedById String?   @map("validated_by_id") @db.Uuid
+  validatedAt   DateTime? @map("validated_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attempts TrainingAttempt[]
+
+  @@index([tenantId, status, kind])
+  @@map("training_items")
+}
+
+model TrainingAttempt {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  itemId     String   @map("item_id") @db.Uuid
+  answer     Int
+  correct    Boolean
+  answeredAt DateTime @default(now()) @map("answered_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  item   TrainingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, answeredAt])
+  @@map("training_attempts")
+}
+
+/// Configuration et historique des sauvegardes (manuelles, automatiques, Google Drive).
+model BackupSetting {
+  tenantId       String    @id @map("tenant_id") @db.Uuid
+  autoEnabled    Boolean   @default(false) @map("auto_enabled")
+  frequencyHours Int       @default(24) @map("frequency_hours")
+  /// Jeton de rafraichissement Google chiffre (AES-256-GCM, cle BACKUP_ENC_KEY) ; jamais renvoye au navigateur.
+  driveTokenEnc  String?   @map("drive_token_enc")
+  driveFolderId  String?   @map("drive_folder_id")
+  driveAccount   String?   @map("drive_account")
+  lastBackupAt   DateTime? @map("last_backup_at")
+  lastStatus     String?   @map("last_status")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("backup_settings")
+}
+
+model BackupRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  trigger     String // manual | auto | pre_restore
+  destination String // local | drive
+  fileName    String   @map("file_name")
+  sizeBytes   Int      @map("size_bytes")
+  checksum    String
+  driveFileId String?  @map("drive_file_id")
+  /// Copie locale (compressee) : permet la restauration meme sans Google Drive.
+  data        Bytes?
+  status      String // ok | failed
+  error       String?
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("backup_records")
+}
+
+// =====================================================================================
+// P6 : migration depuis d'autres logiciels, inventaire, promotions et fidelite, RH, alertes.
+// =====================================================================================
+
+/// Session d'inventaire (complet ou partiel) : comptages, ecarts valorises, validation par un responsable.
+model InventorySession {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  number        String
+  scope         String    @default("full") // full | partial
+  status        String    @default("open") // open | validated | cancelled
+  note          String?
+  createdById   String?   @map("created_by_id") @db.Uuid
+  validatedById String?   @map("validated_by_id") @db.Uuid
+  validatedAt   DateTime? @map("validated_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  counts InventoryCount[]
+
+  @@unique([tenantId, number])
+  @@map("inventory_sessions")
+}
+
+model InventoryCount {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  sessionId   String   @map("session_id") @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  lotId       String?  @map("lot_id") @db.Uuid
+  expected    Int
+  counted     Int
+  countedById String?  @map("counted_by_id") @db.Uuid
+  countedAt   DateTime @default(now()) @map("counted_at")
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, productId, lotId])
+  @@map("inventory_counts")
+}
+
+/// Promotion appliquee automatiquement a la caisse (remise %, montant, ou x achetes = y offerts).
+model Promotion {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String
+  type        String // percent | amount | buy_x_get_y
+  value       Int      @default(0)
+  buyQty      Int      @default(0) @map("buy_qty")
+  freeQty     Int      @default(0) @map("free_qty")
+  productIds  Json     @default("[]") @map("product_ids")
+  categoryIds Json     @default("[]") @map("category_ids")
+  startDate   DateTime @map("start_date") @db.Date
+  endDate     DateTime @map("end_date") @db.Date
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive, startDate, endDate])
+  @@map("promotions")
+}
+
+model LeaveRequest {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  employeeId  String    @map("employee_id") @db.Uuid
+  type        String // conge | maladie | permission | autre
+  startDate   DateTime  @map("start_date") @db.Date
+  endDate     DateTime  @map("end_date") @db.Date
+  status      String    @default("requested") // requested | approved | rejected
+  note        String?
+  decidedById String?   @map("decided_by_id") @db.Uuid
+  decidedAt   DateTime? @map("decided_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startDate])
+  @@map("leave_requests")
+}
+
+/// Planning du personnel (dont les gardes).
+model Shift {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  date       DateTime @db.Date
+  startTime  String   @map("start_time")
+  endTime    String   @map("end_time")
+  isGarde    Boolean  @default(false) @map("is_garde")
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, date])
+  @@map("shifts")
+}
+
+/// Import d'un fichier d'un autre logiciel (Excel, CSV, base de donnees, PDF, image) : analyse, correspondance, import.
+model ImportJob {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  fileName     String    @map("file_name")
+  format       String
+  tableName    String    @default("") @map("table_name")
+  entity       String
+  status       String    @default("analyzed") // analyzed | imported | failed
+  columns      Json      @default("[]")
+  mapping      Json      @default("{}")
+  report       Json      @default("{}")
+  rowsTotal    Int       @default(0) @map("rows_total")
+  rowsImported Int       @default(0) @map("rows_imported")
+  /// Lignes extraites (JSON compresse) : l'import se rejoue sans renvoyer le fichier.
+  data         Bytes
+  createdById  String?   @map("created_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+  importedAt   DateTime? @map("imported_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("import_jobs")
+}
+
+/// Photo du produit (stockee a part pour ne pas alourdir les recherches du catalogue).
+model ProductPhoto {
+  productId String   @id @map("product_id") @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  mime      String
+  data      Bytes
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("product_photos")
+}
+
+/// Session de caisse : ouverture (fond de caisse declare par la caissiere, billet par billet), cloture et ecart.
+model CashSession {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  number        String
+  register      String    @default("Caisse 1")
+  cashierId     String    @map("cashier_id") @db.Uuid
+  openedAt      DateTime  @default(now()) @map("opened_at")
+  openingFloat  Int       @map("opening_float")
+  openingDetail Json      @default("{}") @map("opening_detail")
+  closedAt      DateTime? @map("closed_at")
+  expectedCash  Int?      @map("expected_cash")
+  countedCash   Int?      @map("counted_cash")
+  closingDetail Json      @default("{}") @map("closing_detail")
+  diff          Int?
+  status        String    @default("open") // open | closed
+  note          String?
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  expenses  CashExpense[]
+  variances CashVariance[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status])
+  @@map("cash_sessions")
+}
+
+/// Mouvements du fonds de roulement (tresorerie de reserve, distincte des caisses) : ouverture, approvisionnement par la
+/// banque/le coffre, et sorties vers une caisse a sec. Reserve au manager (droit reports.read) : la caissiere ne la voit pas.
+model CashReserveMove {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  /// opening | deposit (alimentation) | transfer_out (vers une caisse) | bank_deposit (depot en banque)
+  type        String
+  amount      Int
+  toRegister  String?  @map("to_register")
+  note        String?
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("cash_reserve_moves")
+}
+
+/// Ecart constate a la cloture d'une caisse (deficit ou excedent) : registre que le manager suit jusqu'a justification,
+/// remboursement ou depot en banque (excedents, une fois par mois). La caissiere est avertie par message interne.
+model CashVariance {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  sessionId    String    @map("session_id") @db.Uuid
+  cashierId    String    @map("cashier_id") @db.Uuid
+  /// deficit | surplus
+  kind         String
+  amount       Int
+  /// open | justified | reimbursed | banked
+  status       String    @default("open")
+  note         String?
+  resolvedById String?   @map("resolved_by_id")
+  resolvedAt   DateTime? @map("resolved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("cash_variances")
+}
+
+/// Depense payee directement en especes dans la caisse (comptabilisee D charge / C 571).
+model CashExpense {
+  id          String   @id @default(uuid()) @db.Uuid
+  /// N° de piece de caisse (PC-AAAA-00001), imprimee avec la signature de la caissiere.
+  number      String   @default("")
+  tenantId    String   @map("tenant_id") @db.Uuid
+  sessionId   String?  @map("session_id") @db.Uuid
+  amount      Int
+  category    String
+  label       String
+  beneficiary String?
+  accountCode String   @map("account_code")
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session CashSession? @relation(fields: [sessionId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@map("cash_expenses")
+}
+
+/// Depot de stockage : reserves (medicaments, parapharmacie, Reserve 1...) a cote du depot de vente (comptoir / rayons).
+model Depot {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  /// reserve | vente_annexe
+  kind      String   @default("reserve")
+  note      String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@map("depots")
+}
+
+/// Ticket saisi par un vendeur et envoye a la caisse : la caissiere le voit arriver, l'encaisse ; il devient alors une vente.
+model SaleTicket {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  number     String
+  sellerId   String?   @map("seller_id") @db.Uuid
+  customerId String?   @map("customer_id") @db.Uuid
+  note       String?
+  /// [{ productId, quantity, unitPrice?, discount? }]
+  items      Json      @default("[]")
+  /// open | paid | cancelled
+  status     String    @default("open")
+  saleId     String?   @map("sale_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at")
+  closedAt   DateTime? @map("closed_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status, createdAt])
+  @@map("sale_tickets")
+}
+
+/// Catalogue d'un grossiste (CIP, designation, DCI, disponibilite) importe depuis son fichier ; relie les fiches produit a son code CIP.
+model SupplierCatalogItem {
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  supplierId         String   @map("supplier_id") @db.Uuid
+  cip                String
+  designation        String   @default("")
+  dci                String   @default("")
+  available          Boolean  @default(true)
+  productId          String?  @map("product_id") @db.Uuid
+  /// none | exact | suggested | linked
+  matchState         String   @default("none") @map("match_state")
+  suggestedProductId String?  @map("suggested_product_id") @db.Uuid
+  score              Int      @default(0)
+  updatedAt          DateTime @default(now()) @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, supplierId, cip])
+  @@index([tenantId, supplierId, matchState])
+  @@index([tenantId, productId])
+  @@map("supplier_catalog_items")
+}
+
+/// Reclamation / retour / avoir fournisseur (non livre, erreur de livraison, avarie...) ; delai maximum de reclamation : 7 jours.
+model SupplierClaim {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  number        String
+  supplierId    String    @map("supplier_id") @db.Uuid
+  receiptId     String?   @map("receipt_id") @db.Uuid
+  blNumber      String?   @map("bl_number")
+  productId     String?   @map("product_id") @db.Uuid
+  productName   String    @map("product_name")
+  cip           String?
+  quantity      Int       @default(1)
+  /// non_livre | erreur_livraison | avarie | peremption | autre
+  nature        String
+  detail        String?
+  returnGoods   Boolean   @default(false) @map("return_goods")
+  deliveredAt   DateTime  @map("delivered_at") @db.Date
+  deadline      DateTime  @db.Date
+  /// a_traiter | declare | accepte | refuse | avoir_recu | clos
+  status        String    @default("a_traiter")
+  declaredAt    DateTime? @map("declared_at")
+  declaredVia   String?   @map("declared_via")
+  creditNoteRef String?   @map("credit_note_ref")
+  creditAmount  Int       @default(0) @map("credit_amount")
+  notes         String?
+  history       Json      @default("[]")
+  createdById   String?   @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status, deadline])
+  @@index([tenantId, supplierId])
+  @@map("supplier_claims")
+}
+
+/// Référentiel CIP commun (Laborex, CEP/SEP, Ubipharm…) : table partagée entre toutes les pharmacies, sans données de pharmacie.
+model CipReference {
+  cip         String   @id
+  designation String
+  dci         String   @default("")
+  /// laborex | cep | ubipharm
+  providers   String[]
+
+  @@map("cip_reference")
+}
+
+/// Compte d'un client de la pharmacie sur l'application / le site (téléphone + mot de passe).
+model CustomerAccount {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  customerId   String    @map("customer_id") @db.Uuid
+  phone        String
+  passwordHash String    @map("password_hash")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, phone])
+  @@map("customer_accounts")
+}
+
+/// Livreur de la pharmacie : se connecte à l'application livreur avec son téléphone et un code.
+model Courier {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  phone     String
+  pinHash   String   @map("pin_hash")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, phone])
+  @@map("couriers")
+}
+
+/// Commande passée en ligne. new -> accepted -> ready -> out -> delivered (ou cancelled).
+model OnlineOrder {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  number        String
+  accountId     String   @map("account_id") @db.Uuid
+  customerId    String   @map("customer_id") @db.Uuid
+  status        String   @default("new")
+  /// [{ productId, name, quantity, unitPrice }]
+  items         Json
+  subtotal      Int
+  deliveryFee   Int      @default(0) @map("delivery_fee")
+  total         Int
+  /// delivery | pickup
+  fulfilment    String   @default("delivery")
+  address       String?
+  addressNote   String?  @map("address_note")
+  phone         String
+  /// mtn_momo | airtel_money | cash (à la livraison / au comptoir)
+  paymentMethod String   @map("payment_method")
+  paymentRef    String?  @map("payment_ref")
+  /// pending | declared | paid | cod
+  paymentStatus String   @default("pending") @map("payment_status")
+  saleId        String?  @map("sale_id") @db.Uuid
+  courierId     String?  @map("courier_id") @db.Uuid
+  note          String?
+  history       Json     @default("[]")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status])
+  @@index([tenantId, courierId])
+  @@index([tenantId, accountId])
+  @@map("online_orders")
+}
+
+/// Notification destinée à un livreur ou à un client (consultée par l'application).
+model PortalNotification {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  recipientType String    @map("recipient_type")
+  recipientId   String    @map("recipient_id") @db.Uuid
+  orderId       String?   @map("order_id") @db.Uuid
+  title         String
+  body          String
+  readAt        DateTime? @map("read_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, recipientType, recipientId, createdAt])
+  @@map("portal_notifications")
+}
+
+/// Messagerie interne : message à toute l'équipe (recipientId nul) ou à un agent. kind : message | info | alerte.
+model ChatMessage {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  senderId    String   @map("sender_id") @db.Uuid
+  recipientId String?  @map("recipient_id") @db.Uuid
+  kind        String   @default("message")
+  body        String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, recipientId, createdAt])
+  @@map("chat_messages")
+}
+
+/// Dernière lecture d'une conversation par un agent (convKey = 'all' ou l'identifiant de l'autre agent).
+model ChatRead {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  userId   String   @map("user_id") @db.Uuid
+  convKey  String   @map("conv_key")
+  readAt   DateTime @default(now()) @map("read_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, convKey])
+  @@map("chat_reads")
+}
+
+/// Procès-verbal de destruction de produits périmés (3 exemplaires : direction départementale de la santé, comptabilité, archive).
+model Destruction {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  number         String
+  /// [{ productId, name, lotNumber, expiryDate, quantity, unitCost, value }]
+  items          Json
+  totalValue     Int      @map("total_value")
+  reason         String   @default("Péremption")
+  method         String?
+  witness        String?
+  notes          String?
+  pharmacistId   String?  @map("pharmacist_id") @db.Uuid
+  pharmacistName String?  @map("pharmacist_name")
+  /// Signature du pharmacien (image) au moment de l'établissement du procès-verbal.
+  signature      String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, number])
+  @@map("destructions")
+}
+
+/// Poste de pointage enregistré par l'administrateur (jeton secret conservé uniquement sur l'ordinateur concerné).
+model ClockStation {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  name       String
+  tokenHash  String    @map("token_hash")
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("clock_stations")
+}
+
+/// Pointage : arrivée et départ d'un agent, identifié par son code personnel sur un poste enregistré.
+model TimeClock {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  day         DateTime  @db.Date
+  inAt        DateTime  @map("in_at")
+  outAt       DateTime? @map("out_at")
+  lateMinutes Int       @default(0) @map("late_minutes")
+  station     String?
+  ip          String?
+  note        String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, day])
+  @@index([tenantId, userId, day])
+  @@map("time_clocks")
+}

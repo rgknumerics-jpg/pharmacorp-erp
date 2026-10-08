@@ -1,0 +1,22 @@
+{
+  "main": [
+    "Votre pharmacie vend. Mais vous dit-elle quoi faire demain ?",
+    "Stock qui dort. Péremptions oubliées. Marges invisibles. Et des décisions, toujours trop tard.",
+    "PHARMACORP. De la gestion, au pilotage.",
+    "Chaque matin, votre cockpit : ce qui progresse, ce qui urge, ce qui risque de périmer.",
+    "Il ne se contente pas de montrer. Il vous dit quoi faire.",
+    "Vos ventes du jour deviennent une commande, avec les codes CIP de Laborex ou de la CEP.",
+    "Marges, trésorerie, Mobile Money : plus aucune zone d'ombre.",
+    "Vos clients commandent. Votre livreur est prévenu dès que le paiement est validé.",
+    "Vous ne gérez plus seulement votre pharmacie. Vous la pilotez. PHARMACORP."
+  ],
+  "short": [
+    "Votre pharmacie vend. Mais vous dit-elle quoi faire demain ?",
+    "Stock qui dort. Péremptions oubliées. Décisions toujours trop tard.",
+    "PHARMACORP. De la gestion, au pilotage.",
+    "Votre cockpit montre ce qui urge. Et le conseiller vous dit quoi faire.",
+    "Vos ventes du jour deviennent une commande Laborex ou CEP.",
+    "Le livreur est prévenu dès que le client a payé.",
+    "Vous ne gérez plus votre pharmacie. Vous la pilotez."
+  ]
+}

@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: erp
+          POSTGRES_PASSWORD: erp
+          POSTGRES_DB: erp_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U erp -d erp_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      # Role applicatif (non-superuser/non-BYPASSRLS) : c'est CE role que l'app et les tests
+      # doivent utiliser, pour que la Row-Level Security multi-tenant soit reellement exercee
+      # en CI -- utiliser le role proprietaire "erp" ici masquerait silencieusement toute
+      # regression RLS (bug trouve et corrige le 2026-09-27, voir ARCHITECTURE.md section 10).
+      DATABASE_URL: postgresql://erp_app:erp_app@localhost:5432/erp_test?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: ci-access-secret-min-32-characters-long
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_SECRET: ci-refresh-secret-min-32-characters-long
+      JWT_REFRESH_TTL: 7d
+      SEED_TENANT_NAME: Pharmacie Pilote
+      SEED_ADMIN_EMAIL: admin@example.com
+      SEED_ADMIN_PASSWORD: ChangeMe123!
+      PORT: 3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Installer les dependances
+        run: npm ci --workspaces --include-workspace-root
+
+      - name: Generer le client Prisma
+        run: npm run db:generate
+
+      - name: Appliquer les migrations (role proprietaire, cree aussi le role applicatif erp_app)
+        env:
+          DATABASE_URL: postgresql://erp:erp@localhost:5432/erp_test?schema=public
+        run: npm run db:migrate:deploy
+
+      - name: Seed (role proprietaire : robuste au role applicatif aussi, voir seed.ts)
+        env:
+          DATABASE_URL: postgresql://erp:erp@localhost:5432/erp_test?schema=public
+        run: npm run db:seed
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Tests unitaires
+        run: npm run test
+
+      - name: Tests end-to-end (role applicatif erp_app -- RLS reellement exercee)
+        run: npm run test:e2e

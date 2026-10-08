@@ -1,0 +1,1 @@
+Copie générée depuis Desktop\API\plantes-medicinales (node scripts/sync-apps.cjs). Ne pas modifier ici.

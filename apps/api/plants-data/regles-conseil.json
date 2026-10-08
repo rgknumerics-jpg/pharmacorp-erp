@@ -1,0 +1,225 @@
+{
+ "version": "1.0",
+ "_note": "Règles de conseil complémentaire (plantes / compléments alimentaires). Déterministe, sans IA générative. Construit à partir des textes NCCIH (domaine public) et de la base plantes. À faire valider par un pharmacien avant usage : les listes de mots-clés, les interactions et les niveaux de prudence sont une première version.",
+ "avertissement": "Conseil documentaire d’aide à la vente, non validé cliniquement. Le complément alimentaire ne remplace jamais un traitement. Demander toujours : grossesse / allaitement, enfant, traitement en cours (anticoagulant, antidiabétique, antirétroviral…), allergies. En cas de doute : avis du pharmacien.",
+
+ "classes": {
+  "anticoagulant": ["warfarine","coumadine","acenocoumarol","sintrom","previscan","fluindione","rivaroxaban","xarelto","apixaban","eliquis","dabigatran","pradaxa","heparine","enoxaparine","lovenox","fraxiparine","nadroparine"],
+  "antiagregant": ["aspirine","aspegic","kardegic","acide acetylsalicylique","acetylsalicyl","clopidogrel","plavix","ticagrelor","brilique","prasugrel","ticlopidine"],
+  "antidiabetique": ["metformine","glucophage","glibenclamide","daonil","gliclazide","diamicron","glimepiride","amarel","insuline","sitagliptine","januvia","vildagliptine","pioglitazone","repaglinide","glipizide"],
+  "antihypertenseur": ["amlodipine","losartan","valsartan","irbesartan","telmisartan","candesartan","enalapril","ramipril","captopril","lisinopril","perindopril","nifedipine","nicardipine","atenolol","bisoprolol","nebivolol","metoprolol","propranolol","carvedilol","hydrochlorothiazide","furosemide","lasilix","indapamide","spironolactone","clonidine","methyldopa"],
+  "diuretique": ["furosemide","lasilix","hydrochlorothiazide","indapamide","spironolactone","aldactone","bumetanide","acetazolamide"],
+  "contraceptif": ["ethinylestradiol","levonorgestrel","desogestrel","drospirenone","norethisterone","norgestimate","pilule","contracepti","medroxyprogesterone","depo-provera","implant"],
+  "corticoide": ["prednisone","prednisolone","dexamethasone","hydrocortisone","betamethasone","methylprednisolone","cortancyl","solupred","celestene","deflazacort"],
+  "antidepresseur": ["fluoxetine","sertraline","paroxetine","citalopram","escitalopram","amitriptyline","clomipramine","imipramine","venlafaxine","duloxetine","mirtazapine","trazodone","moclobemide","fluvoxamine"],
+  "sedatif": ["diazepam","valium","bromazepam","lexomil","lorazepam","temesta","alprazolam","xanax","clonazepam","rivotril","zolpidem","stilnox","zopiclone","imovane","phenobarbital","gardenal","hydroxyzine","atarax","codeine","morphine","tramadol","clobazam","oxazepam","nitrazepam","meprobamate"],
+  "antiepileptique": ["carbamazepine","tegretol","valproate","depakine","phenytoine","lamotrigine","levetiracetam","topiramate","phenobarbital","gardenal"],
+  "antiretroviral": ["efavirenz","tenofovir","lamivudine","dolutegravir","nevirapine","ritonavir","lopinavir","abacavir","zidovudine","emtricitabine","atazanavir","raltegravir","darunavir","truvada","tld","tle","kaletra","atripla"],
+  "antituberculeux": ["rifampicine","isoniazide","pyrazinamide","ethambutol","rifater","rifinah","rifabutine"],
+  "immunosuppresseur": ["ciclosporine","tacrolimus","azathioprine","mycophenolate","methotrexate","sirolimus","everolimus","leflunomide","tofacitinib"],
+  "antineoplasique": ["capecitabine","tamoxifene","letrozole","anastrozole","imatinib","cyclophosphamide","cisplatine","carboplatine","paclitaxel","docetaxel","doxorubicine","chimiotherapie","hydroxyurea","hydroxycarbamide"],
+  "digoxine": ["digoxine","digitaline","digitoxine"],
+  "lithium": ["lithium","teralithe"],
+  "statine": ["simvastatine","atorvastatine","rosuvastatine","pravastatine","fluvastatine"],
+  "antiarythmique": ["amiodarone","cordarone","flecainide","sotalol","propafenone"],
+  "thyroide": ["levothyroxine","levothyrox","carbimazole","benzylthiouracile"]
+ },
+
+ "suppression": {
+  "classes": ["antiretroviral","antituberculeux","immunosuppresseur","antineoplasique","antiepileptique","lithium","digoxine","antiarythmique"],
+  "message": "Traitement à marge thérapeutique étroite ou à nombreuses interactions (antirétroviral, antituberculeux, immunosuppresseur, anticancéreux, antiépileptique, lithium, digitalique, antiarythmique) : aucune plante proposée automatiquement. Demander l’avis du pharmacien ou du prescripteur."
+ },
+
+ "declencheurs": [
+  { "besoin": "douleur_inflammatoire", "poids": 1.0, "libelle": "anti-inflammatoire (AINS)", "mots": ["ibuprofene","brufen","advil","nurofen","diclofenac","voltarene","voltaren","flector","niflumique","niflugel","nifluril","ketoprofene","profenid","bi-profenid","fastum","naproxene","apranax","aceclofenac","piroxicam","feldene","meloxicam","mobic","tenoxicam","etoricoxib","arcoxia","celecoxib","celebrex","nimesulide","acide mefenamique","ponstan","indometacine","indocid","flurbiprofene","cataflam","aspirine","aspegic","kardegic","acide acetylsalicylique","diclo","ketum"] },
+  { "besoin": "douleur_inflammatoire", "poids": 0.5, "libelle": "antalgique", "mots": ["paracetamol","acetaminophene","panadex","panadol","doliprane","efferalgan","dafalgan","tylenol","perfalgan","dolotil","tramadol","tramal","nefopam","acupan"] },
+  { "besoin": "douleur_inflammatoire", "poids": 0.5, "libelle": "myorelaxant", "mots": ["thiocolchicoside","coltramyl","miorel","methocarbamol","myolastan","tetrazepam","baclofene","chlorzoxazone"] },
+
+  { "besoin": "toux_rhume", "poids": 1.0, "libelle": "traitement de la toux / du rhume", "mots": ["ambroxol","mucosolvan","bromhexine","bisolvon","carbocisteine","bronchokod","rhinathiol","acetylcysteine","fluimucil","pholcodine","dextromethorphane","toplexil","drill","tussidane","antitussif","expectorant","mucolytique","sirop toux","guaifenesine","pseudoephedrine","actifed","fervex","humex","rhinadvil","dolirhume","rhumagrip","clarix","helicidine","prospan","hexapneumine","maxilase","benzonatate","codeine sirop"] },
+
+  { "besoin": "digestion_nausee", "poids": 1.0, "libelle": "traitement de la nausée / digestion lente", "mots": ["domperidone","motilium","metoclopramide","primperan","ondansetron","zophren","dimenhydrinate","dramamine","antiemetique","meclozine"] },
+  { "besoin": "colique_spasme", "poids": 1.0, "libelle": "antispasmodique", "mots": ["phloroglucinol","spasfon","trimebutine","debridat","buscopan","butylscopolamine","hyoscine","alverine","meteospasmyl","mebeverine","duspatalin","drotaverine","no-spa","nospa","antispasmodique","simethicone","ballonnement"] },
+  { "besoin": "reflux_gastrique", "poids": 1.0, "libelle": "traitement du reflux / de l’acidité", "mots": ["omeprazole","esomeprazole","inexium","pantoprazole","inipomp","lansoprazole","rabeprazole","ranitidine","famotidine","gaviscon","maalox","rennie","topaal","alginate","antiacide","phosphalugel","gelox","hydroxyde d aluminium","hydroxyde d'aluminium","hydroxyde de magnesium"] },
+  { "besoin": "transit_constipation", "poids": 1.0, "libelle": "laxatif / constipation", "mots": ["lactulose","duphalac","macrogol","forlax","transipeg","bisacodyl","dulcolax","laxatif","glycerine suppositoire","sorbitol","docusate","microlax"] },
+
+  { "besoin": "sommeil_stress", "poids": 1.0, "libelle": "aide au sommeil / à la détente", "mots": ["melatonine","circadin","doxylamine","donormyl","sommeil","stress","anxiete legere","alprazolam","bromazepam","lexomil","lorazepam","diazepam","zolpidem","hydroxyzine","atarax"] },
+
+  { "besoin": "urinaire", "poids": 1.0, "libelle": "traitement urinaire / cystite", "mots": ["nitrofurantoine","furadantine","fosfomycine","monuril","phenazopyridine","norfloxacine","cystite","pivmecillinam","trimethoprime","flavoxate","urispas","oxybutynine"] },
+
+  { "besoin": "jambes_lourdes", "poids": 1.0, "libelle": "veinotonique", "mots": ["diosmine","daflon","hesperidine","troxerutine","veinotonique","ginkor","cyclo 3","cyclo3","tanakan fort","venoruton","detralex","flavonoide","heparine gel","hirudoid","reparil"] },
+
+  { "besoin": "fatigue_tonus", "poids": 1.0, "libelle": "vitamines / tonique", "mots": ["multivitamine","vitamine","vitamines","fortifiant","tonique","magne b6","magnesium","fer ","fumarate ferreux","sulfate ferreux","tardyferon","fumafer","fer+","acide folique","supradyn","berocca","cebion","arginine","oligo-element","oligoelement","asthenie"] },
+
+  { "besoin": "peau_cicatrisation", "poids": 1.0, "libelle": "soin de la peau / brûlure / plaie", "mots": ["biafine","trolamine","cicatrisant","cicalfate","bepanthen","dexpanthenol","tulle gras","sulfadiazine argentique","flammazine","brulure","pommade cicatrisante","pansement","antiseptique","betadine","chlorhexidine","eosine","mercurochrome"] }
+ ],
+
+ "besoins": {
+  "douleur_inflammatoire": {
+   "libelle": "Douleur inflammatoire / articulaire ou douleur persistante",
+   "pourquoi": "Antalgique et/ou anti-inflammatoire au panier : possible gêne articulaire ou musculaire installée. Un complément à base de plante peut être proposé en appoint (jamais à la place du traitement).",
+   "questions": ["Depuis combien de temps la douleur dure-t-elle ?","Prenez-vous un anticoagulant, de l’aspirine ou un traitement pour le diabète ?","Êtes-vous enceinte ou allaitez-vous ?","Avez-vous des antécédents d’ulcère de l’estomac ou de problèmes de vésicule biliaire ?"],
+   "plantes": [
+    { "id": "curcuma-longa", "motsCles": ["curcuma","curcumine","turmeric","curcumin"], "priorite": 1, "note": "Complément le plus souvent proposé en appoint de l’inconfort articulaire. Préférer une formulation standard ; certaines formes à biodisponibilité renforcée ont été liées à des atteintes du foie (NCCIH)." },
+    { "id": "zingiber-officinale", "motsCles": ["gingembre","ginger","zingiber"], "priorite": 2, "note": "Alternative bien tolérée en général ; peut donner des brûlures d’estomac." },
+    { "id": "boswellia-serrata", "motsCles": ["boswellia","encens indien","frankincense","boswelia"], "priorite": 3, "note": "Données de qualité limitée ; à proposer avec prudence." },
+    { "id": "harpagophytum-procumbens", "motsCles": ["harpagophytum","griffe du diable","harpago"], "priorite": 4, "note": "Contre-indiqué en cas d’ulcère gastro-duodénal ; prudence avec les anticoagulants." }
+   ]
+  },
+  "toux_rhume": {
+   "libelle": "Toux / rhume / voies respiratoires",
+   "pourquoi": "Produit pour la toux ou le rhume au panier : une plante des voies respiratoires peut compléter (gorge, mucosités, défenses).",
+   "questions": ["Toux sèche ou grasse ? Depuis quand ?","Pour un enfant ? (certaines plantes sont déconseillées avant un certain âge)","Asthme ou allergie connue ?","Traitement en cours ?"],
+   "plantes": [
+    { "id": "thymus-vulgaris", "motsCles": ["thym","thymus"], "priorite": 1, "note": "Traditionnellement utilisé pour la toux et la gorge." },
+    { "id": "hedera-helix", "motsCles": ["lierre","hedera","helicidine","prospan"], "priorite": 2, "note": "Extrait de feuilles de lierre pour la toux grasse." },
+    { "id": "althaea-officinalis", "motsCles": ["guimauve","althaea"], "priorite": 3, "note": "Adoucissant pour la gorge irritée / toux sèche." },
+    { "id": "sambucus-nigra", "motsCles": ["sureau","sambucus","elderberry"], "priorite": 4, "note": "Fleurs / baies cuites uniquement ; baies crues toxiques." },
+    { "id": "echinacea-purpurea", "motsCles": ["echinacea","echinacee"], "priorite": 5, "note": "Cure courte seulement ; allergie possible (Astéracées)." }
+   ]
+  },
+  "digestion_nausee": {
+   "libelle": "Nausées / digestion lente",
+   "pourquoi": "Antiémétique ou stimulant de la digestion au panier : gingembre ou menthe en appoint.",
+   "questions": ["Nausées liées à la grossesse, au voyage, à un traitement ?","Reflux ou brûlures d’estomac ?"],
+   "plantes": [
+    { "id": "zingiber-officinale", "motsCles": ["gingembre","ginger","zingiber"], "priorite": 1, "note": "Plante la plus étudiée pour les nausées." },
+    { "id": "mentha-x", "motsCles": ["menthe poivree","menthe","peppermint"], "priorite": 2, "note": "Peut aggraver un reflux ; ne pas appliquer sur le visage des jeunes enfants." },
+    { "id": "foeniculum-vulgare", "motsCles": ["fenouil","foeniculum"], "priorite": 3, "note": "Tisane digestive ; prudence chez le nourrisson et en cas de pathologie hormonodépendante." }
+   ]
+  },
+  "colique_spasme": {
+   "libelle": "Spasmes digestifs / ballonnements",
+   "pourquoi": "Antispasmodique au panier : plantes carminatives en appoint (ballonnements, coliques).",
+   "questions": ["Douleur ou ballonnements récurrents ?","Reflux associé ?"],
+   "plantes": [
+    { "id": "mentha-x", "motsCles": ["menthe poivree","menthe","peppermint"], "priorite": 1, "note": "Huile de menthe poivrée en capsules gastro-résistantes pour le côlon irritable ; éviter si reflux." },
+    { "id": "matricaria-recutita", "motsCles": ["camomille","matricaria","chamomile"], "priorite": 2, "note": "Tisane apaisante ; allergie possible (ambroisie, Astéracées)." },
+    { "id": "foeniculum-vulgare", "motsCles": ["fenouil","foeniculum"], "priorite": 3, "note": "Tisane carminative." }
+   ]
+  },
+  "reflux_gastrique": {
+   "libelle": "Reflux / acidité gastrique",
+   "pourquoi": "Traitement du reflux au panier : tisane apaisante en appoint (éviter la menthe, qui peut aggraver le reflux).",
+   "questions": ["Reflux fréquent ? Depuis quand ?","Signes d’alarme (amaigrissement, vomissements, sang) → médecin."],
+   "plantes": [
+    { "id": "matricaria-recutita", "motsCles": ["camomille","matricaria","chamomile"], "priorite": 1, "note": "Tisane apaisante, sans menthe." },
+    { "id": "zingiber-officinale", "motsCles": ["gingembre","ginger","zingiber"], "priorite": 2, "note": "Peut provoquer des brûlures d’estomac chez certains : à tester prudemment." }
+   ]
+  },
+  "transit_constipation": {
+   "libelle": "Constipation / transit",
+   "pourquoi": "Laxatif au panier : fibres naturelles pour entretenir le transit (avec de l’eau).",
+   "questions": ["Constipation occasionnelle ou chronique ?","Boit-il / elle assez d’eau ?"],
+   "plantes": [
+    { "id": "plantago-ovata", "motsCles": ["psyllium","ispaghul","plantago"], "priorite": 1, "note": "À prendre avec beaucoup d’eau ; espacer de 2 h des autres médicaments." },
+    { "id": "linum-usitatissimum", "motsCles": ["lin","graine de lin","flaxseed","linum"], "priorite": 2, "note": "Graines mûres seulement, jamais crues non mûres ; espacer des médicaments." }
+   ]
+  },
+  "sommeil_stress": {
+   "libelle": "Sommeil / stress",
+   "pourquoi": "Produit pour dormir ou se détendre au panier : une plante calmante peut accompagner (mesures d’hygiène du sommeil d’abord).",
+   "questions": ["Prenez-vous déjà un somnifère, un tranquillisant ou un antidépresseur ?","Conduit-il / elle ou travaille-t-il / elle sur machine ?","Trouble du sommeil depuis longtemps → médecin."],
+   "plantes": [
+    { "id": "valeriana-officinalis", "motsCles": ["valeriane","valerian","valeriana"], "priorite": 1, "note": "Usage court (quelques semaines) ; somnolence possible." },
+    { "id": "passiflora-incarnata", "motsCles": ["passiflore","passiflora","passionflower"], "priorite": 2, "note": "Déconseillée pendant la grossesse ; arrêter avant une opération." },
+    { "id": "melissa-officinalis", "motsCles": ["melisse","melissa"], "priorite": 3, "note": "Tisane douce du soir." },
+    { "id": "lavandula-angustifolia", "motsCles": ["lavande","lavandula"], "priorite": 4, "note": "Aromathérapie / voie orale selon produit." }
+   ]
+  },
+  "urinaire": {
+   "libelle": "Confort urinaire / cystite",
+   "pourquoi": "Traitement urinaire au panier : plante diurétique ou canneberge en appoint du confort urinaire. Une cystite avérée relève d’un traitement prescrit.",
+   "questions": ["Fièvre, douleur dans le dos, sang dans les urines → médecin.","Cystites à répétition ?","Prenez-vous de la warfarine ?"],
+   "plantes": [
+    { "id": "vaccinium-macrocarpon", "motsCles": ["canneberge","cranberry","vaccinium"], "priorite": 1, "note": "Aide à la prévention des récidives ; ne remplace pas un traitement." },
+    { "id": "equisetum-arvense", "motsCles": ["prele","equisetum"], "priorite": 2, "note": "Diurétique ; prudence avec le lithium et les diurétiques." }
+   ]
+  },
+  "jambes_lourdes": {
+   "libelle": "Jambes lourdes / insuffisance veineuse",
+   "pourquoi": "Veinotonique au panier : plantes veinotoniques en appoint.",
+   "questions": ["Gonflement d’une seule jambe, douleur localisée → médecin (phlébite).","Prise d’anticoagulants ?"],
+   "plantes": [
+    { "id": "vitis-vinifera", "motsCles": ["vigne rouge","vitis","pepin de raisin","grape seed"], "priorite": 1, "note": "Extrait de feuilles de vigne rouge / pépins de raisin." },
+    { "id": "aesculus-hippocastanum", "motsCles": ["marronnier","marron d inde","aesculus","horse chestnut"], "priorite": 2, "note": "Extraits standardisés seulement (les graines crues sont toxiques)." }
+   ]
+  },
+  "fatigue_tonus": {
+   "libelle": "Fatigue / tonus",
+   "pourquoi": "Vitamines ou fortifiant au panier : une plante adaptogène ou tonique peut compléter.",
+   "questions": ["Fatigue récente ou persistante (→ médecin) ?","Tension artérielle, diabète, anticoagulant ?","Enceinte ou allaitante ?"],
+   "plantes": [
+    { "id": "moringa-oleifera", "motsCles": ["moringa"], "priorite": 1, "note": "Feuilles riches en nutriments ; produit local courant." },
+    { "id": "rhodiola-rosea", "motsCles": ["rhodiola"], "priorite": 2, "note": "Données de qualité limitée ; insomnie possible le soir." },
+    { "id": "panax-ginseng", "motsCles": ["ginseng","panax"], "priorite": 3, "note": "Insomnie fréquente ; interactions nombreuses." }
+   ]
+  },
+  "peau_cicatrisation": {
+   "libelle": "Peau / brûlure légère / cicatrisation",
+   "pourquoi": "Soin cutané ou antiseptique au panier : plante apaisante et cicatrisante en usage externe.",
+   "questions": ["Brûlure étendue, profonde ou sur le visage → médecin.","Allergie aux Astéracées (pour le calendula) ?"],
+   "plantes": [
+    { "id": "aloe-vera", "motsCles": ["aloe","aloès"], "priorite": 1, "note": "Gel en usage externe uniquement ; le latex par voie orale est irritant." },
+    { "id": "calendula-officinalis", "motsCles": ["calendula","souci"], "priorite": 2, "note": "Crème apaisante ; allergie possible (Astéracées)." }
+   ]
+  }
+ },
+
+ "interactions": [
+  { "plantes": ["curcuma-longa"], "classes": ["anticoagulant","antiagregant"], "niveau": "eviter", "message": "Curcuma : risque de saignement avec anticoagulant / antiagrégant." },
+  { "plantes": ["curcuma-longa"], "classes": ["antidiabetique"], "niveau": "prudence", "message": "Curcuma : peut abaisser la glycémie, surveiller avec un antidiabétique." },
+  { "plantes": ["curcuma-longa"], "classes": ["statine"], "niveau": "prudence", "message": "Curcuma : surveiller le foie avec une statine." },
+  { "plantes": ["zingiber-officinale"], "classes": ["anticoagulant","antiagregant"], "niveau": "prudence", "message": "Gingembre : effet possible sur la coagulation à fortes doses ; avis du pharmacien." },
+  { "plantes": ["zingiber-officinale"], "classes": ["antidiabetique"], "niveau": "prudence", "message": "Gingembre : peut abaisser la glycémie." },
+  { "plantes": ["boswellia-serrata"], "classes": ["anticoagulant","antiagregant"], "niveau": "prudence", "message": "Boswellia : prudence avec les anticoagulants." },
+  { "plantes": ["harpagophytum-procumbens"], "classes": ["anticoagulant","antiagregant"], "niveau": "eviter", "message": "Harpagophytum : prudence avec les anticoagulants ; contre-indiqué en cas d’ulcère." },
+  { "plantes": ["allium-sativum"], "classes": ["anticoagulant","antiagregant"], "niveau": "eviter", "message": "Ail (compléments) : augmente le risque de saignement." },
+  { "plantes": ["ginkgo-biloba"], "classes": ["anticoagulant","antiagregant","antiepileptique"], "niveau": "eviter", "message": "Ginkgo : risque de saignement / interactions." },
+  { "plantes": ["hypericum-perforatum"], "classes": ["contraceptif","anticoagulant","antidepresseur","immunosuppresseur","antiretroviral","digoxine","antiepileptique","statine","antineoplasique","antiarythmique","corticoide","sedatif"], "niveau": "eviter", "message": "Millepertuis : interactions graves avec de très nombreux médicaments (contraceptifs, antidépresseurs, anticoagulants…) : ne jamais associer sans avis." },
+  { "plantes": ["glycyrrhiza-glabra"], "classes": ["antihypertenseur","corticoide","diuretique","digoxine"], "niveau": "eviter", "message": "Réglisse : hypokaliémie et hypertension avec ces traitements." },
+  { "plantes": ["valeriana-officinalis","passiflora-incarnata","melissa-officinalis","lavandula-angustifolia","eschscholzia-californica","humulus-lupulus"], "classes": ["sedatif"], "niveau": "prudence", "message": "Plante sédative + sédatif / anxiolytique / opioïde : somnolence additive. Déconseillé de conduire." },
+  { "plantes": ["valeriana-officinalis","passiflora-incarnata","melissa-officinalis","lavandula-angustifolia"], "classes": ["antidepresseur"], "niveau": "prudence", "message": "Plante sédative + antidépresseur : demander l’avis du pharmacien." },
+  { "plantes": ["vaccinium-macrocarpon"], "classes": ["anticoagulant"], "niveau": "prudence", "message": "Canneberge : données contradictoires avec la warfarine ; surveillance de l’INR." },
+  { "plantes": ["aesculus-hippocastanum","vitis-vinifera"], "classes": ["anticoagulant","antiagregant"], "niveau": "prudence", "message": "Veinotonique végétal : prudence avec les anticoagulants." },
+  { "plantes": ["panax-ginseng"], "classes": ["anticoagulant","antiagregant"], "niveau": "eviter", "message": "Ginseng : peut perturber la coagulation." },
+  { "plantes": ["panax-ginseng","rhodiola-rosea","withania-somnifera"], "classes": ["antidiabetique","antihypertenseur","antidepresseur"], "niveau": "prudence", "message": "Plante adaptogène : peut modifier la glycémie / la tension ou interagir avec un antidépresseur." },
+  { "plantes": ["withania-somnifera"], "classes": ["thyroide","sedatif","corticoide"], "niveau": "prudence", "message": "Ashwagandha : prudence en cas de maladie thyroïdienne ou de sédatifs." },
+  { "plantes": ["echinacea-purpurea"], "classes": ["corticoide"], "niveau": "prudence", "message": "Échinacée : effet immunostimulant, peu logique avec une corticothérapie prolongée." },
+  { "plantes": ["matricaria-recutita"], "classes": ["anticoagulant"], "niveau": "prudence", "message": "Camomille : prudence avec les anticoagulants." },
+  { "plantes": ["orthosiphon-stamineus","equisetum-arvense"], "classes": ["diuretique","antihypertenseur","lithium"], "niveau": "prudence", "message": "Plante diurétique + diurétique / antihypertenseur : risque de déshydratation ou de perte de potassium." },
+  { "plantes": ["plantago-ovata","linum-usitatissimum"], "classes": ["anticoagulant","antidiabetique","digoxine","thyroide","antiepileptique","contraceptif"], "niveau": "prudence", "message": "Fibres : espacer d’au moins 2 h des autres médicaments (absorption réduite)." },
+  { "plantes": ["thymus-vulgaris","hedera-helix"], "classes": ["antineoplasique"], "niveau": "prudence", "message": "Avis médical en cas de traitement anticancéreux." }
+ ],
+
+ "meta": {
+  "curcuma-longa": { "grossesse": "deconseille", "enfant": "avis", "contreIndications": ["Obstruction des voies biliaires / calculs : avis médical.","Interrompre en cas de fatigue, nausées, urines foncées ou jaunisse (atteinte du foie possible)."] },
+  "zingiber-officinale": { "grossesse": "avis", "enfant": "avis", "contreIndications": [] },
+  "boswellia-serrata": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Asthme : ne pas remplacer le traitement."] },
+  "harpagophytum-procumbens": { "grossesse": "deconseille", "enfant": "deconseille", "contreIndications": ["Ulcère gastro-duodénal.","Calculs biliaires : avis médical."] },
+  "thymus-vulgaris": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Huile essentielle : usage réservé aux adultes sur avis."] },
+  "hedera-helix": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Enfant < 2 ans (extraits) : avis médical."] },
+  "echinacea-purpurea": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Allergie aux Astéracées.","Maladies auto-immunes.","Cure de 8 semaines maximum."] },
+  "sambucus-nigra": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Baies crues, feuilles et tiges : toxiques."] },
+  "mentha-x": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Reflux : peut l’aggraver.","Ne pas appliquer l’huile essentielle sur le visage de jeunes enfants."] },
+  "foeniculum-vulgare": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Cancers hormonodépendants : avis médical."] },
+  "matricaria-recutita": { "grossesse": "avis", "enfant": "ok", "contreIndications": ["Allergie aux Astéracées (ambroisie, armoise)."] },
+  "valeriana-officinalis": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Somnolence : ne pas conduire."] },
+  "passiflora-incarnata": { "grossesse": "deconseille", "enfant": "avis", "contreIndications": ["Arrêter 2 semaines avant une intervention."] },
+  "melissa-officinalis": { "grossesse": "avis", "enfant": "avis", "contreIndications": [] },
+  "lavandula-angustifolia": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Allergie cutanée possible en usage externe."] },
+  "vaccinium-macrocarpon": { "grossesse": "ok", "enfant": "avis", "contreIndications": ["Ne remplace pas un traitement antibiotique."] },
+  "orthosiphon-stamineus": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Insuffisance rénale ou cardiaque : avis médical."] },
+  "equisetum-arvense": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Insuffisance rénale ou cardiaque : avis médical.","Cure courte."] },
+  "vitis-vinifera": { "grossesse": "avis", "enfant": "avis", "contreIndications": [] },
+  "aesculus-hippocastanum": { "grossesse": "avis", "enfant": "deconseille", "contreIndications": ["Graines, écorce et feuilles crues : toxiques ; extraits standardisés seulement."] },
+  "moringa-oleifera": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Racines et écorce : déconseillées pendant la grossesse."] },
+  "rhodiola-rosea": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Ne pas prendre le soir (insomnie)."] },
+  "panax-ginseng": { "grossesse": "deconseille", "enfant": "deconseille", "contreIndications": ["Cure de 3 mois maximum.","Insomnie fréquente."] },
+  "aloe-vera": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Usage externe uniquement dans ce conseil ; latex oral irritant."] },
+  "calendula-officinalis": { "grossesse": "avis", "enfant": "ok", "contreIndications": ["Allergie aux Astéracées."] },
+  "plantago-ovata": { "grossesse": "ok", "enfant": "avis", "contreIndications": ["Boire beaucoup d’eau ; risque d’obstruction intestinale si insuffisamment hydraté."] },
+  "linum-usitatissimum": { "grossesse": "avis", "enfant": "avis", "contreIndications": ["Ne jamais consommer de graines crues non mûres."] }
+ },
+
+ "motsCleComplements": ["complement alimentaire","complément alimentaire","gelule","gélule","capsule","comprime","comprimé","sirop","tisane","infusion","extrait","ampoule","phyto","bio"]
+}

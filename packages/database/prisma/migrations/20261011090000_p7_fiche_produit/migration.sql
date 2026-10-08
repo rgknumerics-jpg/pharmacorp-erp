@@ -1,0 +1,3 @@
+ALTER TYPE "MovementType" ADD VALUE IF NOT EXISTS 'unpack';
+ALTER TABLE "products" ADD COLUMN "supplier_codes" JSONB NOT NULL DEFAULT '{}', ADD COLUMN "pack_size" INTEGER NOT NULL DEFAULT 1, ADD COLUMN "units_per_box" INTEGER, ADD COLUMN "unit_sale_price" INTEGER, ADD COLUMN "unit_product_id" UUID, ADD COLUMN "storage" TEXT NOT NULL DEFAULT 'normal', ADD COLUMN "location" TEXT, ADD COLUMN "safety_stock" INTEGER NOT NULL DEFAULT 0, ADD COLUMN "reorder_qty" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "company_profiles" ADD COLUMN "vat_rates" JSONB NOT NULL DEFAULT '[{"label":"Exonéré","rate":0},{"label":"TVA 18 %","rate":18}]', ADD COLUMN "price_coefficients" JSONB NOT NULL DEFAULT '{"exempt":1.41,"taxed":1.6}';

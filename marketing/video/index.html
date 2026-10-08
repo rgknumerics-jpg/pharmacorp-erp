@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>PHARMACORP — Short publicitaire</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block;width:540px;height:960px}</style></head>
+<body><canvas id="c" width="1080" height="1920"></canvas>
+<script>
+/* ============ PHARMACORP — short publicitaire 9:16 (1080x1920), rendu canvas + audio WebAudio, enregistré en MP4 ============ */
+const W = 1080, H = 1920;
+const Q = new URLSearchParams(location.search);
+const CUT = Q.get('cut') === 'short' ? 'short' : 'main';
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+const C = { dark: '#04301c', green: '#0a7a3f', bright: '#14a85a', orange: '#f58a07', cream: '#f4f8f5', red: '#e5322d', ink: '#0b1f15', white: '#fff' };
+const HEAD = '"Segoe UI Black","Arial Black",sans-serif', BODY = '"Segoe UI Semibold","Segoe UI",Arial,sans-serif', EMO = '"Segoe UI Emoji"';
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const eo = (x) => 1 - Math.pow(1 - clamp(x), 3), eio = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const eob = (x) => { x = clamp(x); const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const lerp = (a, b, t) => a + (b - a) * t;
+const fr = (n) => Math.round(n).toLocaleString('fr-FR').replace(/[  ]/g, ' ');
+
+/* ---------- images (captures réelles de l'ERP sur localhost:5173) ---------- */
+const IMG = {};
+const names = { cockpit: 'cockpit', advisor: 'advisor', purchasing: 'purchasing', finance: 'finance', dashboard: 'dashboard', shop: 'm-shop', courier: 'm-courier2', orders: 'm-orders', logo: 'logo' };
+function loadImgs() {
+  return Promise.all(Object.entries(names).map(([k, f]) => new Promise((ok) => { const i = new Image(); i.onload = () => { IMG[k] = i; ok(); }; i.onerror = () => ok(); i.src = `../shots/${f}.png`; })));
+}
+
+/* ---------- primitives ---------- */
+function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function txt(s, x, y, size, color = '#fff', font = HEAD, align = 'center', alpha = 1) { g.save(); g.globalAlpha *= alpha; g.font = `${size}px ${font}`; g.fillStyle = color; g.textAlign = align; g.textBaseline = 'alphabetic'; g.fillText(s, x, y); g.restore(); }
+function wrap(s, maxW, size, font) { g.font = `${size}px ${font}`; const words = s.split(' '); const lines = []; let cur = ''; for (const w of words) { const t = cur ? cur + ' ' + w : w; if (g.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; } if (cur) lines.push(cur); return lines; }
+function headline(lines, t, y0, size = 84, color = '#fff', accent = C.orange) { // lignes = [[texte, accent?]] apparaissent une à une
+  lines.forEach(([s, ac], i) => { const k = eob(clamp((t - i * 0.18) / 0.5)); if (k <= 0) return; g.save(); g.globalAlpha = clamp(k); g.translate(0, (1 - k) * 40); txt(s, W / 2, y0 + i * (size * 1.12), size, ac ? accent : color); g.restore(); });
+}
+function pill(s, x, y, color = C.orange, size = 34, alpha = 1) { g.save(); g.globalAlpha *= alpha; g.font = `${size}px ${HEAD}`; const w = g.measureText(s).width + 56; rr(x - w / 2, y - size, w, size * 1.7, size); g.fillStyle = color; g.fill(); txt(s, x, y + size * 0.28, size, '#fff'); g.restore(); }
+function card(x, y, w, h, fill = '#fff', r = 36, shadow = true) { g.save(); if (shadow) { g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 50; g.shadowOffsetY = 18; } rr(x, y, w, h, r); g.fillStyle = fill; g.fill(); g.restore(); }
+function bg(t, tone = 'dark') {
+  const grd = g.createLinearGradient(0, 0, W * .6, H);
+  if (tone === 'dark') { grd.addColorStop(0, '#05391f'); grd.addColorStop(1, '#021a0e'); }
+  else if (tone === 'red') { grd.addColorStop(0, '#3a0d0b'); grd.addColorStop(1, '#14100f'); }
+  else if (tone === 'bright') { grd.addColorStop(0, '#0f9a52'); grd.addColorStop(1, '#05512c'); }
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  // croix pharmacie et points discrets en dérive
+  g.save(); g.globalAlpha = .07; g.fillStyle = '#fff';
+  for (let i = 0; i < 14; i++) { const x = (i * 197 + t * (14 + i * 3)) % (W + 120) - 60, y = (i * 331 + t * (8 + (i % 4) * 5)) % (H + 120) - 60, s = 22 + (i % 3) * 14; g.fillRect(x - s / 6, y - s / 2, s / 3, s); g.fillRect(x - s / 2, y - s / 6, s, s / 3); }
+  g.restore();
+  const rg = g.createRadialGradient(W / 2, H * .42, 100, W / 2, H * .42, 900); rg.addColorStop(0, 'rgba(20,168,90,.22)'); rg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = rg; g.fillRect(0, 0, W, H);
+}
+
+/* ---------- capture d'écran réelle dans un cadre, avec caméra (zoom/déplacement) et surbrillances ---------- */
+const FW = 1000, FH = 760, FX = 40;
+function shotScene(img, t, o) { // o: {y, cam:[{t,r:[x,y,w]}], marks:[{t0,t1,rect:[x,y,w,h],label}], tag}
+  const fy = o.y ?? 560;
+  card(FX - 12, fy - 12, FW + 24, FH + 24, '#fff', 44);
+  g.save(); rr(FX, fy, FW, FH, 34); g.clip();
+  // caméra : interpolation entre mots-clés
+  const ks = o.cam; let a = ks[0], b = ks[0];
+  for (let i = 0; i < ks.length; i++) { if (t >= ks[i].t) a = ks[i]; if (t < ks[i].t) { b = ks[i]; break; } b = ks[i]; }
+  const k = a === b ? 1 : eio((t - a.t) / (b.t - a.t));
+  const r = [lerp(a.r[0], b.r[0], k), lerp(a.r[1], b.r[1], k), lerp(a.r[2], b.r[2], k)];
+  const s = FW / r[2];
+  if (img) g.drawImage(img, r[0] * 1.08, r[1] * 1.08, r[2] * 1.08, r[2] * 1.08 * FH / FW, FX, fy, FW, FH);
+  for (const m of o.marks ?? []) {
+    const p = clamp((t - m.t0) / 0.35), out = clamp((m.t1 - t) / 0.3); const al = Math.min(p, out); if (al <= 0) continue;
+    const [mx, my, mw, mh] = m.rect; const x = FX + (mx - r[0]) * s - 10, y = fy + (my - r[1]) * s - 8, w = mw * s + 20, h = mh * s + 16;
+    g.save(); g.globalAlpha = al; g.shadowColor = C.orange; g.shadowBlur = 30; rr(x, y, w, h, 18); g.lineWidth = 7; g.strokeStyle = C.orange; g.stroke(); g.restore();
+  }
+  g.restore();
+  // petit bandeau « capture réelle »
+}
+function chip(s, t, t0, x, y, color = C.orange, size = 46, emoji = '') { const k = eob(clamp((t - t0) / 0.45)); if (k <= 0) return; g.save(); g.globalAlpha = clamp(k); g.translate(x, y + (1 - k) * 50); g.scale(.85 + .15 * k, .85 + .15 * k); g.font = `${size}px ${HEAD}`; const w = g.measureText((emoji ? emoji + ' ' : '') + s).width + 70; rr(-w / 2, -size * .95, w, size * 1.75, size); g.fillStyle = color; g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 24; g.shadowOffsetY = 8; g.fill(); g.shadowColor = 'transparent'; g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText((emoji ? emoji + ' ' : '') + s, 0, size * .3); g.restore(); }
+function counter(label, from, to, t, t0, dur, x, y, suffix = ' FCFA', color = '#fff', size = 96) { const k = eo((t - t0) / dur); if (t < t0) return; const v = lerp(from, to, k); g.save(); g.globalAlpha = clamp((t - t0) / 0.3); txt(label, x, y - size * .95, 34, 'rgba(255,255,255,.75)', BODY); txt(fr(v) + suffix, x, y, size, color); g.restore(); }
+
+/* ---------- scènes ---------- */
+const S = {};
+S.hook = (t, d) => {
+  bg(t, 'dark');
+  if (IMG.dashboard) { g.save(); g.globalAlpha = .28; g.filter = 'blur(10px)'; const k = 1 + t * .02; g.drawImage(IMG.dashboard, 0, 0, 2160, 1350, -300 - t * 12, 560, 1700 * k, 1060 * k); g.restore(); }
+  const vg = g.createLinearGradient(0, 0, 0, H); vg.addColorStop(0, 'rgba(2,26,14,.9)'); vg.addColorStop(.5, 'rgba(2,26,14,.35)'); vg.addColorStop(1, 'rgba(2,26,14,.9)'); g.fillStyle = vg; g.fillRect(0, 0, W, H);
+  counter('Ventes du jour', 0, 33000, t, .1, 1.6, W / 2, 640, ' FCFA', '#fff', 120);
+  const k1 = eob(clamp((t - .15) / .5)); if (k1 > 0) { g.save(); g.globalAlpha = clamp(k1); txt('Votre pharmacie vend.', W / 2, 330, 92, '#fff'); g.restore(); }
+  const k2 = eob(clamp((t - 1.5) / .5)); if (k2 > 0) { g.save(); g.globalAlpha = clamp(k2); g.translate(0, (1 - k2) * 50); txt('Mais vous dit-elle', W / 2, 1010, 96, '#fff'); txt('quoi faire demain ?', W / 2, 1130, 118, C.orange); g.restore(); }
+  const pulse = 1 + .06 * Math.sin(t * 6); if (t > 2.2) { g.save(); g.translate(W / 2, 1420); g.scale(pulse, pulse); g.globalAlpha = clamp((t - 2.2) / .4); txt('?', 0, 160, 420, 'rgba(245,138,7,.9)'); g.restore(); }
+};
+S.problem = (t, d, p) => {
+  bg(t, 'red');
+  const items = p.items; const step = (d - 1.1) / items.length;
+  headline([['Et pendant ce temps…']], t, 270, 74, 'rgba(255,255,255,.85)');
+  items.forEach((it, i) => {
+    const t0 = .5 + i * step * .92; const k = eob(clamp((t - t0) / .42)); if (k <= 0) return;
+    const y = 420 + i * 270, side = i % 2 ? 1 : -1; const sh = t - t0 < .6 ? Math.sin((t - t0) * 60) * 6 * (1 - (t - t0) / .6) : 0;
+    g.save(); g.translate((1 - k) * 600 * side + sh, 0); g.globalAlpha = clamp(k);
+    card(70, y, 940, 220, 'rgba(255,255,255,.96)', 36); rr(70, y, 22, 220, 10); g.fillStyle = C.red; g.fill();
+    g.font = `100px ${EMO}`; g.textAlign = 'left'; g.fillStyle = '#000'; g.fillText(it[0], 130, y + 142);
+    txt(it[1], 270, y + 108, 58, C.ink, HEAD, 'left'); txt(it[2], 270, y + 170, 36, '#6b3a38', BODY, 'left');
+    g.restore();
+  });
+};
+S.reveal = (t, d) => {
+  bg(t, 'bright');
+  const k = eob(clamp((t - .15) / .6));
+  g.save(); g.translate(W / 2, 560); g.scale(.7 + .3 * k, .7 + .3 * k); g.globalAlpha = clamp(k); card(-400, -170, 800, 340, '#fff', 52); if (IMG.logo) g.drawImage(IMG.logo, -330, -135, 660, 270 * (IMG.logo.height / IMG.logo.width) * (660 / 270) > 270 ? 270 : 270 * 1); g.restore();
+  // De la gestion (barré) -> au pilotage
+  const a = clamp((t - .6) / .4);
+  g.save(); g.globalAlpha = a; txt('DE LA GESTION', W / 2, 960, 100, a > .99 && t > 1.7 ? 'rgba(255,255,255,.45)' : '#fff');
+  if (t > 1.2) { const w = 640 * eo((t - 1.2) / .4); g.fillStyle = C.red; g.fillRect(W / 2 - 320, 925, w, 12); } g.restore();
+  const b = eob(clamp((t - 1.9) / .55)); if (b > 0) { g.save(); g.globalAlpha = clamp(b); g.translate(0, (1 - b) * 70); txt('AU PILOTAGE', W / 2, 1140, 150, C.orange); g.restore(); }
+  const c = clamp((t - 2.6) / .5); if (c > 0) txt('Le cockpit de votre pharmacie', W / 2, 1290, 52, '#fff', BODY, 'center', c);
+};
+S.cockpit = (t, d, p) => {
+  bg(t, 'dark');
+  pill('COCKPIT', W / 2, 200, C.orange, 36, eo(t / .4));
+  headline([['Le cockpit', 0], ['de votre pharmacie', 1]], t, 330, 88);
+  shotScene(IMG.cockpit, t, {
+    cam: [{ t: 0, r: [340, 190, 1640] }, { t: 1.5, r: [340, 350, 1250] }, { t: 3.1, r: [340, 880, 1000] }],
+    marks: [{ t0: 1.7, t1: 3.0, rect: [345, 380, 1180, 50] }, { t0: 3.3, t1: d, rect: [885, 945, 255, 120] }],
+  });
+  chip('50 700 FCFA risquent de périmer', t, 1.9, W / 2, 1385, C.red, 42, '⚠');
+  chip('CA du mois +56,9 %', t, 3.4, W / 2, 1480, C.green, 46, '📈');
+};
+S.advisor = (t, d) => {
+  bg(t, 'dark');
+  pill('CONSEILLER', W / 2, 200, C.orange, 36, eo(t / .4));
+  headline([['Il ne montre pas.', 0], ['Il conseille.', 1]], t, 330, 92);
+  shotScene(IMG.advisor, t, {
+    cam: [{ t: 0, r: [340, 195, 1620] }, { t: 1.2, r: [340, 205, 1000] }, { t: 2.8, r: [345, 290, 1000] }],
+    marks: [{ t0: 1.5, t1: 2.8, rect: [365, 262, 640, 40] }, { t0: 3.0, t1: d, rect: [365, 325, 1500, 78] }],
+  });
+  chip('Urgent · Trésorerie', t, 1.6, W / 2, 1385, C.red, 46, '💰');
+  chip('À faire : provisionnez 264 103 FCFA', t, 3.0, W / 2, 1480, C.green, 40, '👉');
+};
+S.cockpit_advisor = (t, d) => { // version courte : cockpit puis conseiller
+  if (t < d * .5) S.cockpit(t, d, {}); else { S.advisor(t - d * .5, d, {}); }
+};
+S.purchases = (t, d) => {
+  bg(t, 'dark');
+  pill('ACHATS INTELLIGENTS', W / 2, 200, C.orange, 36, eo(t / .4));
+  headline([['Du comptoir', 0], ['à la commande', 1]], t, 330, 92);
+  shotScene(IMG.purchasing, t, {
+    cam: [{ t: 0, r: [340, 260, 1640] }, { t: 1.4, r: [340, 500, 1500] }, { t: 3.0, r: [345, 930, 1000] }],
+    marks: [{ t0: 1.5, t1: 2.9, rect: [1520, 540, 180, 400] }, { t0: 3.1, t1: d, rect: [342, 977, 450, 50] }],
+  });
+  chip('LABOREX', t, 2.0, 330, 1385, C.green, 46, '✓'); chip('CEP', t, 2.4, 720, 1385, C.green, 46, '✓');
+  chip('CIP du fournisseur · fichier prêt', t, 3.3, W / 2, 1480, C.orange, 40, '📄');
+};
+S.finance = (t, d) => {
+  bg(t, 'dark');
+  pill('FINANCES', W / 2, 200, C.orange, 36, eo(t / .4));
+  headline([['Plus aucune', 0], ['zone d’ombre', 1]], t, 330, 92);
+  shotScene(IMG.finance, t, {
+    cam: [{ t: 0, r: [340, 195, 1640] }, { t: 1.4, r: [340, 200, 800] }, { t: 3.0, r: [1160, 200, 800] }],
+    marks: [{ t0: 1.5, t1: 2.9, rect: [365, 365, 750, 45] }, { t0: 3.1, t1: d, rect: [1185, 262, 750, 210] }],
+  });
+  chip('Marge brute visible', t, 1.8, W / 2, 1385, C.green, 46, '📊'); chip('MTN MoMo · Airtel · Caisse', t, 3.2, W / 2, 1480, C.orange, 42, '📱');
+};
+function phone(img, x, y, w, rot, alpha = 1, glow = false) {
+  const h = w * (img ? img.height / img.width : 2.16);
+  g.save(); g.translate(x + w / 2, y + h / 2); g.rotate(rot); g.globalAlpha *= alpha;
+  g.shadowColor = glow ? C.orange : 'rgba(0,0,0,.5)'; g.shadowBlur = glow ? 60 : 40; g.shadowOffsetY = 18;
+  rr(-w / 2 - 16, -h / 2 - 16, w + 32, h + 32, 64); g.fillStyle = '#0b0b0b'; g.fill(); g.shadowColor = 'transparent';
+  rr(-w / 2, -h / 2, w, h, 50); g.save(); g.clip(); if (img) g.drawImage(img, -w / 2, -h / 2, w, h); g.restore();
+  g.restore(); return h;
+}
+S.phones = (t, d) => {
+  bg(t, 'dark');
+  pill('CLIENT · PHARMACIE · LIVREUR', W / 2, 200, C.orange, 34, eo(t / .4));
+  headline([['Tout le monde', 0], ['est connecté', 1]], t, 330, 90);
+  const k1 = eob(clamp((t - .3) / .6)), k2 = eob(clamp((t - .6) / .6));
+  phone(IMG.orders, 40 - (1 - k1) * 500, 560, 440, -.05, clamp(k1));
+  phone(IMG.courier, 600 + (1 - k2) * 500, 560, 440, .05, clamp(k2), t > 2.2);
+  // notification qui descend sur le téléphone du livreur
+  const n = eob(clamp((t - 2.2) / .5)); if (n > 0) { g.save(); g.translate(0, -140 + n * 140 + 0); g.globalAlpha = clamp(n); card(300, 480, 780, 150, '#fff', 36); g.font = `64px ${EMO}`; g.textAlign = 'left'; g.fillStyle = '#000'; g.fillText('💰', 330, 585); txt('Paiement validé', 430, 538, 40, C.ink, HEAD, 'left'); txt('Course à prendre · déjà payée', 430, 590, 30, '#555', BODY, 'left'); g.restore(); }
+  chip('Le livreur est prévenu', t, 2.6, W / 2, 1560, C.green, 44, '🔔');
+};
+S.end = (t, d, p) => {
+  bg(t, 'dark');
+  const k = eob(clamp(t / .6)); g.save(); g.translate(W / 2, 400); g.scale(.8 + .2 * k, .8 + .2 * k); g.globalAlpha = clamp(k); card(-380, -165, 760, 330, '#fff', 52); if (IMG.logo) g.drawImage(IMG.logo, -310, -130, 620, 260); g.restore();
+  const a = eob(clamp((t - .7) / .5)); if (a > 0) { g.save(); g.globalAlpha = clamp(a); g.translate(0, (1 - a) * 40); txt('DE LA GESTION', W / 2, 760, 84, 'rgba(255,255,255,.5)'); txt('AU PILOTAGE', W / 2, 880, 128, C.orange); g.restore(); }
+  const b = eob(clamp((t - 1.5) / .5)); if (b > 0) { g.save(); g.globalAlpha = clamp(b); g.translate(0, (1 - b) * 40); txt('Vous ne gérez plus', W / 2, 1060, 70, '#fff'); txt('seulement votre pharmacie.', W / 2, 1140, 70, '#fff'); txt('Vous la pilotez.', W / 2, 1260, 100, C.orange); g.restore(); }
+  const c = eob(clamp((t - 2.4) / .5)); if (c > 0) { const s = 1 + .035 * Math.sin(t * 5); g.save(); g.translate(W / 2, 1440); g.scale(c * s, c * s); g.globalAlpha = clamp(c); rr(-390, -75, 780, 150, 75); g.fillStyle = C.orange; g.shadowColor = 'rgba(245,138,7,.6)'; g.shadowBlur = 50; g.fill(); g.shadowColor = 'transparent'; txt('DÉCOUVREZ PHARMACORP', 0, 24, 52, '#fff'); g.restore(); txt('Le logiciel pensé pour les pharmacies modernes.', W / 2, 1600, 38, 'rgba(255,255,255,.85)', BODY, 'center', clamp((t - 3) / .5)); }
+};
+
+/* ---------- montage ---------- */
+const PLAN = {
+  main: [
+    { fn: 'hook', dur: 3.8, vo: 0 },
+    { fn: 'problem', dur: 7.2, vo: 1, p: { items: [['📦', 'Stock qui dort', 'de l’argent immobilisé sur les étagères'], ['⏳', 'Péremptions oubliées', 'des lots perdus sans prévenir'], ['❓', 'Marges invisibles', 'on vend, mais que gagne-t-on vraiment ?'], ['🕒', 'Décisions trop tard', 'on réagit quand le problème est là']] } },
+    { fn: 'reveal', dur: 3.9, vo: 2 },
+    { fn: 'cockpit', dur: 5.2, vo: 3 },
+    { fn: 'advisor', dur: 3.9, vo: 4 },
+    { fn: 'purchases', dur: 4.8, vo: 5 },
+    { fn: 'finance', dur: 3.9, vo: 6 },
+    { fn: 'phones', dur: 4.7, vo: 7 },
+    { fn: 'end', dur: 7.0, vo: 8 },
+  ],
+  short: [
+    { fn: 'hook', dur: 3.7, vo: 0 },
+    { fn: 'problem', dur: 5.3, vo: 1, p: { items: [['📦', 'Stock qui dort', 'de l’argent immobilisé'], ['⏳', 'Péremptions oubliées', 'des lots perdus'], ['🕒', 'Décisions trop tard', 'on réagit après coup']] } },
+    { fn: 'reveal', dur: 3.8, vo: 2 },
+    { fn: 'cockpit_advisor', dur: 4.8, vo: 3 },
+    { fn: 'purchases', dur: 3.7, vo: 4 },
+    { fn: 'phones', dur: 3.3, vo: 5 },
+    { fn: 'end', dur: 4.2, vo: 6 },
+  ],
+}[CUT];
+let T = 0; PLAN.forEach((s) => { s.t0 = T; T += s.dur; }); const TOTAL = T;
+const SUBS = {
+  main: ['Votre pharmacie vend. Mais vous dit-elle quoi faire demain ?', 'Stock qui dort. Péremptions oubliées. Marges invisibles. Et des décisions, toujours trop tard.', 'PHARMACORP. De la gestion, au pilotage.', 'Chaque matin, votre cockpit : ce qui progresse, ce qui urge, ce qui risque de périmer.', 'Il ne se contente pas de montrer. Il vous dit quoi faire.', 'Vos ventes du jour deviennent une commande, avec les codes CIP de Laborex ou de la CEP.', 'Marges, trésorerie, Mobile Money : plus aucune zone d’ombre.', 'Vos clients commandent. Votre livreur est prévenu dès que le paiement est validé.', 'Vous ne gérez plus seulement votre pharmacie. Vous la pilotez. PHARMACORP.'],
+  short: ['Votre pharmacie vend. Mais vous dit-elle quoi faire demain ?', 'Stock qui dort. Péremptions oubliées. Décisions toujours trop tard.', 'PHARMACORP. De la gestion, au pilotage.', 'Votre cockpit montre ce qui urge. Et le conseiller vous dit quoi faire.', 'Vos ventes du jour deviennent une commande Laborex ou CEP.', 'Le livreur est prévenu dès que le client a payé.', 'Vous ne gérez plus votre pharmacie. Vous la pilotez.'],
+}[CUT];
+const KEYS = /^(quoi|faire|demain|cockpit|pilotage|pilotez|conseiller|CIP|Laborex|CEP|Mobile|Money|PHARMACORP|paiement|livreur|dort|oubliées|invisibles|tard)/i;
+let VOD = []; // durées des voix
+function subtitle(sceneIdx, local, d) {
+  const text = SUBS[PLAN[sceneIdx].vo]; if (!text) return;
+  const vd = VOD[PLAN[sceneIdx].vo] || d * .8; const t = local - .12; if (t < 0 || t > vd + .35) return;
+  const words = text.split(' '); const tot = words.reduce((s, w) => s + w.length + 2, 0); let acc = 0; const stamps = words.map((w) => { const a = acc / tot; acc += w.length + 2; return a * vd; });
+  // fenêtre de lecture : on affiche 2 lignes qui contiennent le mot courant
+  g.font = `56px ${HEAD}`; const lines = []; let cur = []; let curW = 0;
+  words.forEach((w, i) => { const wd = g.measureText(w + ' ').width; if (curW + wd > 900 && cur.length) { lines.push(cur); cur = []; curW = 0; } cur.push(i); curW += wd; }); if (cur.length) lines.push(cur);
+  let idx = 0; stamps.forEach((s, i) => { if (t >= s) idx = i; }); let li = lines.findIndex((l) => l.includes(idx)); const first = Math.min(li - (li % 2), Math.max(0, lines.length - 2)); const vis = lines.slice(first, first + 2);
+  const bh = vis.length * 78 + 40; const y0 = 1700; g.save(); g.globalAlpha = clamp((t + .1) / .2) * clamp((vd + .35 - t) / .25);
+  rr(60, y0 - 54, 960, bh, 30); g.fillStyle = 'rgba(0,0,0,.62)'; g.fill();
+  vis.forEach((l, row) => { const total = l.reduce((s, i) => s + g.measureText(words[i] + ' ').width, 0); let x = W / 2 - total / 2; l.forEach((i) => { const done = t >= stamps[i]; const wtxt = words[i] + ' '; g.textAlign = 'left'; g.font = `56px ${HEAD}`; g.fillStyle = KEYS.test(words[i].replace(/[.,:?!]/g, '')) ? C.orange : done ? '#fff' : 'rgba(255,255,255,.55)'; g.fillText(wtxt, x, y0 + 14 + row * 78); x += g.measureText(wtxt).width; }); });
+  g.restore();
+}
+function watermark(t) { g.save(); g.globalAlpha = .75; txt('PHARMACORP', W / 2, 1870, 34, '#fff', HEAD); g.restore(); }
+function render(time) {
+  const t = clamp(time, 0, TOTAL - .001); let i = PLAN.findIndex((s) => t >= s.t0 && t < s.t0 + s.dur); if (i < 0) i = PLAN.length - 1;
+  const s = PLAN[i], local = t - s.t0;
+  g.clearRect(0, 0, W, H); g.save(); S[s.fn](local, s.dur, s.p || {}); g.restore();
+  // fondu entre scènes
+  const f = clamp(local / .22); if (f < 1 && i > 0) { g.save(); g.globalAlpha = 1 - f; g.fillStyle = '#021a0e'; g.fillRect(0, 0, W, H); g.restore(); }
+  if (s.fn !== 'end' || local < 1) subtitle(i, local, s.dur);
+  if (s.fn !== 'end' && s.fn !== 'reveal') watermark(t);
+}
+window.__frame = (t) => { render(t); return TOTAL; };
+
+/* ---------- audio : voix, musique synthétisée, effets ---------- */
+function noiseBuf(ac, sec) { const b = ac.createBuffer(1, ac.sampleRate * sec, ac.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; return b; }
+function buildAudio(ac, out, voBuffers) {
+  const nb = noiseBuf(ac, 2);
+  const mk = (type, f, at, dur, gain, dest = out, f2) => { const o = ac.createOscillator(), gn = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f, at); if (f2) o.frequency.exponentialRampToValueAtTime(f2, at + dur); gn.gain.setValueAtTime(0.0001, at); gn.gain.exponentialRampToValueAtTime(gain, at + .01); gn.gain.exponentialRampToValueAtTime(.0001, at + dur); o.connect(gn); gn.connect(dest); o.start(at); o.stop(at + dur + .05); };
+  const noise = (at, dur, gain, f, q, type = 'bandpass', f2) => { const s = ac.createBufferSource(); s.buffer = nb; const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.setValueAtTime(f, at); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, at + dur); fl.Q.value = q; const gn = ac.createGain(); gn.gain.setValueAtTime(0.0001, at); gn.gain.exponentialRampToValueAtTime(gain, at + dur * .3); gn.gain.exponentialRampToValueAtTime(.0001, at + dur); s.connect(fl); fl.connect(gn); gn.connect(out); s.start(at, Math.random()); s.stop(at + dur + .05); };
+  const t0 = ac.currentTime + .4; // départ
+  // --- musique (100 BPM) sur un bus à ducking
+  const bus = ac.createGain(); bus.gain.value = .55; bus.connect(out);
+  const beat = .6; const bars = Math.ceil(TOTAL / (beat * 4)) + 1;
+  const hz = (n) => 440 * Math.pow(2, (n - 69) / 12);
+  const prog = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]]; const roots = [45, 41, 36, 43];
+  const pent = [69, 72, 74, 76, 79, 81];
+  for (let b = 0; b < bars; b++) {
+    const bt = t0 + b * beat * 4, ch = prog[b % 4];
+    if (bt - t0 > TOTAL + .5) break;
+    ch.forEach((n) => { for (const dt of [-6, 6]) { const o = ac.createOscillator(), gn = ac.createGain(), fl = ac.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = hz(n); o.detune.value = dt; fl.type = 'lowpass'; fl.frequency.value = 900; gn.gain.setValueAtTime(.0001, bt); gn.gain.linearRampToValueAtTime(.022, bt + .5); gn.gain.linearRampToValueAtTime(.014, bt + beat * 3.6); gn.gain.linearRampToValueAtTime(.0001, bt + beat * 4); o.connect(fl); fl.connect(gn); gn.connect(bus); o.start(bt); o.stop(bt + beat * 4 + .05); } });
+    for (let k = 0; k < 4; k++) {
+      const at = bt + k * beat;
+      if (k % 2 === 0) mk('sine', 130, at, .28, .5, bus, 42); // kick
+      noise(at + beat / 2, .06, .06, 7000, .8, 'highpass'); // contretemps
+      for (let s = 0; s < 4; s++) if ((k * 4 + s) % 3 !== 1) noise(at + s * beat / 4, .035, .018, 9000, .7, 'highpass'); // shaker
+    }
+    mk('sine', hz(roots[b % 4]), bt, .5, .34, bus); mk('sine', hz(roots[b % 4]), bt + beat * 1.5, .4, .28, bus); mk('sine', hz(roots[b % 4] + 7), bt + beat * 2.75, .4, .22, bus);
+    const pat = [0, 2, 1, 3, 2, 4, 3, 1, 0, 3, 2, 5, 4, 2, 1, 3]; // marimba : phrase 3 contre 4
+    for (let s = 0; s < 16; s++) if (s % 3 !== 2 || s > 8) { const at = bt + s * beat / 4, n = pent[pat[(s + b * 3) % 16]]; mk('triangle', hz(n), at, .22, .05, bus); mk('sine', hz(n + 12), at, .12, .02, bus); }
+  }
+  // --- ducking : la musique baisse sous la voix
+  PLAN.forEach((s) => { const a = t0 + s.t0 + .1, d = VOD[s.vo] || 3; bus.gain.setValueAtTime(bus.gain.value, a - .1); bus.gain.linearRampToValueAtTime(.2, a); bus.gain.setValueAtTime(.2, a + d); bus.gain.linearRampToValueAtTime(.45, a + d + .4); });
+  bus.gain.linearRampToValueAtTime(.0001, t0 + TOTAL + .3);
+  // --- voix
+  PLAN.forEach((s) => { const b = voBuffers[s.vo]; if (!b) return; const src = ac.createBufferSource(), gn = ac.createGain(); src.buffer = b; gn.gain.value = 1.9; src.connect(gn); gn.connect(out); src.start(t0 + s.t0 + .12); });
+  // --- effets sonores
+  const sfx = { whoosh: (a) => noise(a, .45, .22, 300, 1.2, 'bandpass', 4200), hit: (a) => { mk('sine', 90, a, .5, .7, out, 35); noise(a, .25, .25, 1200, .6, 'lowpass'); }, tick: (a) => mk('square', 1800, a, .04, .05), ping: (a) => { mk('sine', 988, a, .4, .16); mk('sine', 1318, a + .12, .55, .16); }, chime: (a) => [1046, 1318, 1568].forEach((f, i) => mk('sine', f, a + i * .09, .6, .12)), scan: (a) => { mk('square', 2400, a, .07, .06); mk('square', 2400, a + .13, .07, .06); }, riser: (a) => { noise(a, 1.2, .18, 400, 1, 'bandpass', 5000); mk('sawtooth', 180, a, 1.2, .05, out, 1500); }, buzz: (a) => mk('sawtooth', 120, a, .25, .1) };
+  const ev = [];
+  PLAN.forEach((s, i) => {
+    if (i > 0) ev.push([s.t0, 'whoosh']);
+    if (s.fn === 'hook') { ev.push([.1, 'tick'], [.5, 'tick'], [1.5, 'whoosh'], [2.2, 'ping']); }
+    if (s.fn === 'problem') { const n = (s.p.items.length); const step = (s.dur - 1.1) / n; for (let k = 0; k < n; k++) ev.push([s.t0 + .5 + k * step * .92, 'buzz'], [s.t0 + .5 + k * step * .92 + .02, 'tick']); }
+    if (s.fn === 'reveal') { ev.push([s.t0 - .9, 'riser'], [s.t0 + .15, 'hit'], [s.t0 + 1.2, 'tick'], [s.t0 + 1.9, 'whoosh'], [s.t0 + 2.0, 'chime']); }
+    if (s.fn === 'cockpit') ev.push([s.t0 + 1.7, 'ping'], [s.t0 + 3.4, 'chime']);
+    if (s.fn === 'cockpit_advisor') ev.push([s.t0 + 1.2, 'ping'], [s.t0 + s.dur * .5 + 1.4, 'tick'], [s.t0 + s.dur * .5 + 3.0, 'chime']);
+    if (s.fn === 'advisor') ev.push([s.t0 + 1.6, 'ping'], [s.t0 + 3.2, 'chime']);
+    if (s.fn === 'purchases') ev.push([s.t0 + 1.5, 'tick'], [s.t0 + 2.0, 'scan'], [s.t0 + 2.4, 'scan'], [s.t0 + 3.3, 'chime']);
+    if (s.fn === 'finance') ev.push([s.t0 + 1.5, 'tick'], [s.t0 + 3.1, 'ping']);
+    if (s.fn === 'phones') ev.push([s.t0 + .3, 'whoosh'], [s.t0 + 2.2, 'ping'], [s.t0 + 2.6, 'chime']);
+    if (s.fn === 'end') ev.push([s.t0 + .1, 'hit'], [s.t0 + 1.5, 'whoosh'], [s.t0 + 2.4, 'chime']);
+  });
+  ev.forEach(([at, k]) => { if (at >= 0) sfx[k](t0 + at); });
+  return t0;
+}
+
+/* ---------- lecture + enregistrement MP4 ---------- */
+async function run() {
+  await loadImgs();
+  const ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+  const dest = ac.createMediaStreamDestination();
+  const master = ac.createGain(); master.gain.value = .9; const comp = ac.createDynamicsCompressor(); master.connect(comp); comp.connect(dest);
+  const bufs = [];
+  for (let i = 0; i < PLAN.length + 2; i++) { try { const r = await fetch(`vo/${CUT}${i + 1}.wav`); if (!r.ok) { bufs[i] = null; continue; } bufs[i] = await ac.decodeAudioData(await r.arrayBuffer()); VOD[i] = bufs[i].duration; } catch { bufs[i] = null; } }
+  const mime = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4'].find((m) => MediaRecorder.isTypeSupported(m));
+  if (!mime) { window.__err = 'MP4 non supporté par ce navigateur'; return; }
+  const stream = cv.captureStream(30); dest.stream.getAudioTracks().forEach((tr) => stream.addTrack(tr));
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 9_000_000, audioBitsPerSecond: 192_000 }); const chunks = [];
+  rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  const done = new Promise((r) => (rec.onstop = r));
+  await ac.resume();
+  const t0 = buildAudio(ac, master, bufs);
+  render(0); rec.start(500);
+  await new Promise((resolve) => { const loop = () => { const t = ac.currentTime - t0; if (t >= TOTAL + .5) return resolve(); render(Math.max(0, t)); requestAnimationFrame(loop); }; requestAnimationFrame(loop); });
+  rec.stop(); await done;
+  const blob = new Blob(chunks, { type: mime });
+  const res = await fetch(`/upload?name=pharmacorp-${CUT}.mp4`, { method: 'POST', body: blob });
+  window.__result = { ok: res.ok, size: blob.size, mime, total: TOTAL };
+}
+/* ---------- rendu image par image (hors temps réel) -> MP4 standard (H.264 + AAC, moov en tête), via WebCodecs ---------- */
+async function runOffline() {
+  await loadImgs();
+  const FPS = 30, SR = 44100, VBR = Number(Q.get('vbr') || 2600000);
+  const tmp = new AudioContext({ sampleRate: SR });
+  const bufs = [];
+  for (let i = 0; i < PLAN.length + 2; i++) { try { const r = await fetch(`vo/${CUT}${i + 1}.wav`); if (!r.ok) { bufs[i] = null; continue; } bufs[i] = await tmp.decodeAudioData(await r.arrayBuffer()); VOD[i] = bufs[i].duration; } catch { bufs[i] = null; } }
+  const frames = Math.ceil((TOTAL + .3) * FPS), dur = frames / FPS;
+  // --- audio : voix + musique + effets rendus hors ligne
+  const oc = new OfflineAudioContext(2, Math.ceil((TOTAL + 1.6) * SR), SR);
+  const master = oc.createGain(); master.gain.value = .9; const comp = oc.createDynamicsCompressor(); master.connect(comp); comp.connect(oc.destination);
+  const t0 = buildAudio(oc, master, bufs);
+  const rendered = await oc.startRendering();
+  const { Muxer, ArrayBufferTarget } = await import('/node_modules/mp4-muxer/build/mp4-muxer.mjs');
+  const target = new ArrayBufferTarget();
+  const muxer = new Muxer({ target, video: { codec: 'avc', width: W, height: H, frameRate: FPS }, audio: { codec: 'aac', numberOfChannels: 2, sampleRate: SR }, fastStart: 'in-memory', firstTimestampBehavior: 'offset' });
+  const venc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: (e) => { window.__err = 'video ' + e.message; } });
+  venc.configure({ codec: 'avc1.640029', width: W, height: H, bitrate: VBR, framerate: FPS, latencyMode: 'quality' });
+  const aenc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: (e) => { window.__err = 'audio ' + e.message; } });
+  aenc.configure({ codec: 'mp4a.40.2', sampleRate: SR, numberOfChannels: 2, bitrate: 128000 });
+  // audio (à partir de t0, l'instant 0 de la vidéo)
+  const L = rendered.getChannelData(0), R = rendered.getChannelData(1), start = Math.round(t0 * SR), total = Math.round(dur * SR), CH = 4096;
+  for (let o = 0; o < total; o += CH) {
+    const n = Math.min(CH, total - o); const data = new Float32Array(n * 2);
+    data.set(L.subarray(start + o, start + o + n), 0); data.set(R.subarray(start + o, start + o + n), n);
+    const ad = new AudioData({ format: 'f32-planar', sampleRate: SR, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round(o / SR * 1e6), data });
+    aenc.encode(ad); ad.close();
+  }
+  // images
+  for (let f = 0; f < frames; f++) {
+    render(f / FPS);
+    const vf = new VideoFrame(cv, { timestamp: Math.round(f * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
+    venc.encode(vf, { keyFrame: f % 60 === 0 }); vf.close();
+    while (venc.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 4));
+    if (f % 60 === 0) await new Promise((r) => setTimeout(r, 0));
+  }
+  await venc.flush(); await aenc.flush(); muxer.finalize();
+  const res = await fetch(`/upload?name=pharmacorp-${CUT}.mp4`, { method: 'POST', body: target.buffer });
+  window.__result = { ok: res.ok, size: target.buffer.byteLength, frames, seconds: dur, mode: 'offline' };
+}
+if (!Q.get('preview')) (Q.get('mode') === 'realtime' ? run() : runOffline()).catch((e) => { window.__err = String(e && e.stack || e); }); else loadImgs().then(() => { window.__ready = true; });
+</script></body></html>
