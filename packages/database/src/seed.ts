@@ -52,13 +52,15 @@ async function main() {
       });
       roleIdByName[roleName] = role.id;
 
-      for (const code of permissionCodes) {
-        if (before && !newCodes.has(code)) continue; // role deja existant : on ne touche qu'aux nouveaux droits
-        const permission = await tx.permission.findUniqueOrThrow({ where: { code } });
-        await tx.rolePermission.upsert({
-          where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
-          update: {},
-          create: { roleId: role.id, permissionId: permission.id },
+      // par lot plutot qu'un aller-retour par droit : la boucle precedente faisait des centaines de
+      // requetes sequentielles, largement sous la seconde en local mais trop lent contre une base
+      // distante (minutes, jusqu'a depasser le delai de la transaction) -- trouve en deployant sur Neon.
+      const codesToAdd = permissionCodes.filter((code) => !before || newCodes.has(code));
+      if (codesToAdd.length) {
+        const perms = await tx.permission.findMany({ where: { code: { in: codesToAdd } } });
+        await tx.rolePermission.createMany({
+          data: perms.map((p) => ({ roleId: role.id, permissionId: p.id })),
+          skipDuplicates: true,
         });
       }
     }
