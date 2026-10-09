@@ -160,10 +160,11 @@ function Orders({ slug, token, info }: { slug: string; token: string; info: any 
 
 function Auth({ slug, registration, onClose, onToken }: { slug: string; registration: boolean; onClose: () => void; onToken: (t: string) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [f, setF] = useState({ name: '', phone: '', password: '' });
+  const [f, setF] = useState({ name: '', phone: '', email: '', password: '' });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const ok = useMemo(() => f.phone.length >= 8 && f.password.length >= 6 && (mode === 'login' || f.name.trim().length >= 2), [f, mode]);
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email);
+  const ok = useMemo(() => f.phone.length >= 8 && f.password.length >= 6 && (mode === 'login' || (f.name.trim().length >= 2 && emailOk)), [f, mode, emailOk]);
   async function go() {
     setBusy(true); setErr(null);
     try { const r = await papi(`/online/${slug}/${mode}`, { json: f }); onToken(r.token); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
@@ -173,7 +174,8 @@ function Auth({ slug, registration, onClose, onToken }: { slug: string; registra
       <div className="w-full max-w-md space-y-3 rounded-t-2xl bg-white p-5 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex gap-2">{(['login', 'register'] as const).filter((m) => m === 'login' || registration).map((m) => <button key={m} className={`flex-1 rounded-lg py-2 text-sm font-bold ${mode === m ? 'bg-brand text-white' : 'bg-slate-100'}`} onClick={() => setMode(m)}>{m === 'login' ? 'Connexion' : 'Créer mon compte'}</button>)}</div>
         {mode === 'register' && <input className="w-full rounded-lg border border-slate-300 px-3 py-3" placeholder="Votre nom et prénom" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />}
-        <input className="w-full rounded-lg border border-slate-300 px-3 py-3" inputMode="tel" placeholder="Téléphone (ex. 06 123 45 67)" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+        <input className="w-full rounded-lg border border-slate-300 px-3 py-3" inputMode="tel" placeholder="Numéro WhatsApp (ex. 06 123 45 67)" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+        {mode === 'register' && <input className="w-full rounded-lg border border-slate-300 px-3 py-3" type="email" placeholder="Adresse e-mail" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />}
         <input className="w-full rounded-lg border border-slate-300 px-3 py-3" type="password" placeholder="Mot de passe (6 caractères minimum)" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter' && ok) go(); }} />
         {err && <p className="text-sm font-bold text-red-700">{err}</p>}
         <button disabled={!ok || busy} onClick={go} className="w-full rounded-xl bg-brand py-3 text-base font-extrabold text-white disabled:opacity-40">{busy ? '…' : mode === 'login' ? 'Me connecter' : 'Créer mon compte'}</button>

@@ -60,18 +60,22 @@ export class OnlineService {
   }
 
   // ------------------------------------------------------------------ comptes clients
-  async register(slug: string, b: { name?: string; phone?: string; password?: string; address?: string }, ip?: string) {
+  async register(slug: string, b: { name?: string; phone?: string; email?: string; password?: string; address?: string }, ip?: string) {
     const { t, online } = await this.tenant(slug);
     if (!online.registration) throw new BadRequestException('Les inscriptions sont fermées.');
     const name = (b.name ?? '').trim().slice(0, 120), phone = normalizePhone(b.phone);
+    const email = (b.email ?? '').trim().toLowerCase().slice(0, 160);
     if (name.length < 2) throw new BadRequestException('Indiquez votre nom.');
-    if (!phone) throw new BadRequestException('Numéro de téléphone invalide (ex. 06 123 45 67).');
+    // numero WhatsApp de contact (meme format que le telephone, section 24 : +242 0X XXX XX XX, le 0 est conserve)
+    if (!phone) throw new BadRequestException('Numéro WhatsApp invalide (ex. 06 123 45 67).');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException('Adresse e-mail invalide.');
     if ((b.password ?? '').length < 6) throw new BadRequestException('Le mot de passe doit comporter au moins 6 caractères.');
     this.auth.guard(`reg:${ip}`);
     const acc = await this.prisma.forTenant(t.id, async (tx) => {
       if (await tx.customerAccount.findFirst({ where: { phone } })) throw new ConflictException('Un compte existe déjà avec ce numéro : connectez-vous.');
       let customer = await tx.customer.findFirst({ where: { phone, isActive: true } });
-      if (!customer) customer = await tx.customer.create({ data: { tenantId: t.id, name, phone, address: (b.address ?? '').trim().slice(0, 200) || null, kind: 'particulier' } });
+      if (!customer) customer = await tx.customer.create({ data: { tenantId: t.id, name, phone, email, address: (b.address ?? '').trim().slice(0, 200) || null, kind: 'particulier' } });
+      else if (!customer.email) await tx.customer.update({ where: { id: customer.id }, data: { email } });
       return tx.customerAccount.create({ data: { tenantId: t.id, customerId: customer.id, phone, passwordHash: await bcrypt.hash(b.password as string, 10) } });
     });
     this.auth.fail(`reg:${ip}`);
