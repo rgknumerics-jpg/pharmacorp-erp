@@ -1,10 +1,11 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Put, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 import { AuthenticatedUser } from '../common/interfaces/jwt-payload.interface';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { Public } from '../common/decorators/public.decorator';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
@@ -29,7 +30,10 @@ export class AuthController {
   @Put('pos-pin/:membershipId') @RequirePermissions('users.write')
   setFor(@CurrentUser() u: AuthenticatedUser, @Param('membershipId', ParseUUIDPipe) id: string, @Body() b: { pin: string }) { return this.authService.setPosPin(u.tenantId, id, b?.pin, u.userId); }
 
+  /** Limite les tentatives : 8 essais par minute et par IP, puis blocage court (meme principe que le code POS, section auth.service.ts). */
   @Public()
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 8, ttl: 60_000 } })
   @Post('login')
   @ApiOkResponse({ description: 'Jetons acces/refresh pour le tenant demande.' })
   login(@Body() dto: LoginDto, @Req() req: Request) {

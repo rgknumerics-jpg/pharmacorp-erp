@@ -1,6 +1,7 @@
 import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'crypto';
@@ -57,6 +58,9 @@ import { CashdeskModule } from './cashdesk/cashdesk.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath, validate: validateEnv }),
+    // En memoire (pas de Redis requis) : pas de garde globale (ThrottlerGuard applique seulement
+    // ou le controleur le demande, ex. auth.controller.ts -> /auth/login).
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 8 }]),
     LoggerModule.forRoot({
       pinoHttp: {
         genReqId: (req) => req.headers['x-request-id'] ?? randomUUID(),

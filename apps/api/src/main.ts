@@ -10,7 +10,16 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   app.useLogger(app.get(Logger));
 
-  app.enableCors({ origin: true, credentials: true });
+  // Liste blanche d'origines : jamais "origin: true" avec credentials:true (n'importe quel site pourrait
+  // alors appeler l'API avec les jetons d'une victime connectee). CORS_ORIGINS (variable d'environnement,
+  // separee par des virgules) permet d'ajouter un domaine (Netlify, domaine propre...) sans toucher au code.
+  const defaultOrigins = ['http://localhost:5173', 'http://localhost:15273', 'http://127.0.0.1:5173', 'https://demo-erp-pharmacorp.netlify.app'];
+  const extraOrigins = (process.env.CORS_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean);
+  const allowedOrigins = [...defaultOrigins, ...extraOrigins];
+  app.enableCors({
+    origin: (origin, cb) => (!origin || allowedOrigins.includes(origin) ? cb(null, true) : cb(new Error('Origine non autorisee'))),
+    credentials: true,
+  });
   configureApp(app);
 
   const swaggerConfig = new DocumentBuilder()
