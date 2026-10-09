@@ -8,7 +8,10 @@ services:
     plan: free
     region: frankfurt
     rootDir: .
-    buildCommand: npm install && npx prisma generate --schema=packages/database/prisma/schema.prisma && echo DIAGSTART && node --version && cd packages/database && node -e "const p=require('typescript/package.json'); console.log('TS VERSION SEEN BY DATABASE PKG:', p.version, require.resolve('typescript'))" && ls -la node_modules/.bin/tsc 2>&1; ls -la ../../node_modules/.bin/tsc 2>&1; cd ../.. && echo DIAGEND && npm run build -w @erp/database && npm run build -w @erp/api
+    # --include=dev est indispensable : NODE_ENV=production (ci-dessous) s'applique aussi au build sur Render,
+    # ce qui pousse npm a ignorer les devDependencies (typescript, prisma CLI, nest-cli...) sans ce drapeau --
+    # tsc tombait alors sur une copie globale non maitrisee de l'image de Render (source du TS5108 persistant).
+    buildCommand: npm install --include=dev && npx prisma generate --schema=packages/database/prisma/schema.prisma && npm run build -w @erp/database && npm run build -w @erp/api
     startCommand: npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma && npm run db:seed && node apps/api/dist/main.js
     healthCheckPath: /health
     envVars:
