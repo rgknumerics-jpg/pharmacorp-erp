@@ -8,7 +8,7 @@ services:
     plan: free
     region: frankfurt
     rootDir: .
-    buildCommand: npm install && npx prisma generate --schema=packages/database/prisma/schema.prisma && npm run build -w @erp/database && npm run build -w @erp/api
+    buildCommand: npm install && npx prisma generate --schema=packages/database/prisma/schema.prisma && echo DIAGNOSTIC: && npx tsc --version && cat packages/database/tsconfig.json && npm ls typescript --all || true && npm run build -w @erp/database && npm run build -w @erp/api
     startCommand: npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma && npm run db:seed && node apps/api/dist/main.js
     healthCheckPath: /health
     envVars:
