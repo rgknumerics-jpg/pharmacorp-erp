@@ -85,6 +85,36 @@ export function SettingsSection() {
           <Toggle on={data.online.delivery} onChange={(v) => set('online', { delivery: v })} label="Livraison" hint="Le livreur est notifié à chaque paiement validé" />
         </div>
         <div className="rounded-xl bg-slate-50 p-3">
+          <div className="mb-2 text-sm font-extrabold">Habillage (nom, logo, couleur)</div>
+          <p className="mb-2 text-xs text-ink-muted">Laissez vide pour reprendre le nom et le logo de la pharmacie. Renseignez ces champs si l’application client a sa propre marque (ex. « Rive Gauche »).</p>
+          <div className="grid gap-2 md:grid-cols-2">
+            <label className="block text-xs font-bold text-ink-muted">Nom de la marque
+              <input className="mt-1 w-full" placeholder="Ex. Rive Gauche" value={data.online.brandName} onChange={(e) => set('online', { brandName: e.target.value })} />
+            </label>
+            <label className="block text-xs font-bold text-ink-muted">Slogan
+              <input className="mt-1 w-full" placeholder="Ex. Votre univers en harmonie, pour un Vous unique" value={data.online.tagline} onChange={(e) => set('online', { tagline: e.target.value })} />
+            </label>
+            <label className="block text-xs font-bold text-ink-muted">Logo (chemin ou URL)
+              <input className="mt-1 w-full" placeholder="/brands/rive-gauche-logo.jpg" value={data.online.logoUrl} onChange={(e) => set('online', { logoUrl: e.target.value })} />
+            </label>
+            <label className="block text-xs font-bold text-ink-muted">Couleur principale
+              <div className="mt-1 flex items-center gap-2">
+                <input type="color" className="h-9 w-12 cursor-pointer rounded border border-ink-line p-0" value={data.online.primaryColor || '#16a34a'} onChange={(e) => set('online', { primaryColor: e.target.value })} />
+                <input className="flex-1" placeholder="#EA7A1E" value={data.online.primaryColor} onChange={(e) => set('online', { primaryColor: e.target.value })} />
+              </div>
+            </label>
+          </div>
+          {(data.online.logoUrl || data.online.brandName) && (
+            <div className="mt-3 flex items-center gap-3 rounded-lg bg-white p-2 ring-1 ring-ink-line">
+              {data.online.logoUrl && <img src={data.online.logoUrl} alt="" className="h-10 w-10 rounded-full object-cover" />}
+              <div>
+                <div className="text-sm font-extrabold" style={data.online.primaryColor ? { color: data.online.primaryColor } : undefined}>{data.online.brandName || 'Aperçu'}</div>
+                {data.online.tagline && <div className="text-xs text-ink-muted">{data.online.tagline}</div>}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3">
           <div className="mb-2 text-sm font-extrabold">Catégories visibles dans l’application client</div>
           <div className="flex flex-wrap gap-2">{cats?.map((c) => { const on = !hiddenCat.has(c.id); return <label key={c.id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${on ? 'bg-brand text-white' : 'bg-white ring-1 ring-ink-line line-through'}`}><input type="checkbox" className="hidden" checked={on} onChange={() => set('online', { hiddenCategoryIds: on ? [...hiddenCat, c.id] : [...hiddenCat].filter((x) => x !== c.id) })} />{c.name}</label>; })}{cats && !cats.length && <span className="text-xs text-ink-muted">Aucune catégorie créée.</span>}</div>
         </div>

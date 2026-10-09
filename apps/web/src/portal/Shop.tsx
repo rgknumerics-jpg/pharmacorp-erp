@@ -36,30 +36,37 @@ export default function Shop({ slug }: { slug: string }) {
   if (err) return <div className="p-6 text-center"><div className="text-4xl">💊</div><p className="mt-2 font-bold">Cette pharmacie n’est pas disponible en ligne pour le moment.</p><p className="text-sm text-slate-500">{err}</p></div>;
   if (!info) return <div className="p-6 text-center text-slate-500">Chargement…</div>;
 
+  const accent = info.primaryColor || undefined; // undefined => la classe Tailwind "brand" (vert PharmaCorp) sert de repli
+  const accentStyle = accent ? { backgroundColor: accent } : undefined;
+  const accentTextStyle = accent ? { color: accent } : undefined;
+
   return (
     <div className="mx-auto min-h-screen max-w-3xl bg-slate-50 pb-20">
-      <header className="sticky top-0 z-10 flex items-center justify-between bg-brand px-4 py-3 text-white shadow">
-        <div><div className="text-lg font-extrabold leading-tight">{info.name}</div><div className="text-xs opacity-80">{[info.city, info.phone].filter(Boolean).join(' · ')}</div></div>
+      <header className={`sticky top-0 z-10 flex items-center justify-between px-4 py-3 text-white shadow ${accent ? '' : 'bg-brand'}`} style={accentStyle}>
+        <div className="flex items-center gap-3">
+          {info.logoUrl && <img src={info.logoUrl} alt={info.name} className="h-10 w-10 rounded-full bg-white object-contain p-0.5" />}
+          <div><div className="text-lg font-extrabold leading-tight">{info.name}</div><div className="text-xs opacity-80">{info.tagline || [info.city, info.phone].filter(Boolean).join(' · ')}</div></div>
+        </div>
         <div className="flex items-center gap-2">
-          {token ? <button className="rounded-full bg-white/20 px-3 py-1 text-sm font-bold" onClick={logout}>Déconnexion</button> : <button className="rounded-full bg-white px-3 py-1 text-sm font-bold text-brand" onClick={() => setAuth(true)}>Connexion</button>}
+          {token ? <button className="rounded-full bg-white/20 px-3 py-1 text-sm font-bold" onClick={logout}>Déconnexion</button> : <button className={`rounded-full bg-white px-3 py-1 text-sm font-bold ${accent ? '' : 'text-brand'}`} style={accentTextStyle} onClick={() => setAuth(true)}>Connexion</button>}
         </div>
       </header>
       <nav className="sticky top-[58px] z-10 flex border-b bg-white text-sm font-bold">
         {([['catalog', '💊 Produits'], ['cart', `🛒 Panier${count ? ` (${count})` : ''}`], ['orders', `📦 Mes commandes${unread ? ` •${unread}` : ''}`]] as const).map(([k, l]) => (
-          <button key={k} onClick={() => (k === 'orders' && !token ? setAuth(true) : setView(k))} className={`flex-1 px-2 py-3 ${view === k ? 'border-b-4 border-brand text-brand' : 'text-slate-500'}`}>{l}</button>
+          <button key={k} onClick={() => (k === 'orders' && !token ? setAuth(true) : setView(k))} className={`flex-1 px-2 py-3 ${view === k ? `border-b-4 ${accent ? '' : 'border-brand text-brand'}` : 'text-slate-500'}`} style={view === k ? { borderColor: accent, color: accent } : undefined}>{l}</button>
         ))}
       </nav>
       <main className="p-3">
-        {view === 'catalog' && <Catalog slug={slug} cart={cart} setCart={setCart} />}
+        {view === 'catalog' && <Catalog slug={slug} cart={cart} setCart={setCart} accent={accent} />}
         {view === 'cart' && <Cart slug={slug} info={info} cart={cart} setCart={setCart} token={token} needLogin={() => setAuth(true)} done={() => { setCart({}); setView('orders'); }} />}
         {view === 'orders' && token && <Orders slug={slug} token={token} info={info} />}
       </main>
-      {auth && <Auth slug={slug} registration={info.registration} onClose={() => setAuth(false)} onToken={(t) => { setToken(t); store.set(KEY + '.token', t); setAuth(false); }} />}
+      {auth && <Auth slug={slug} registration={info.registration} accent={accent} onClose={() => setAuth(false)} onToken={(t) => { setToken(t); store.set(KEY + '.token', t); setAuth(false); }} />}
     </div>
   );
 }
 
-function Catalog({ slug, cart, setCart }: { slug: string; cart: Record<string, { item: Item; qty: number }>; setCart: (c: Record<string, { item: Item; qty: number }>) => void }) {
+function Catalog({ slug, cart, setCart, accent }: { slug: string; cart: Record<string, { item: Item; qty: number }>; setCart: (c: Record<string, { item: Item; qty: number }>) => void; accent?: string }) {
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('');
   const [data, setData] = useState<{ total: number; categories: { id: string; name: string }[]; items: Item[] } | null>(null);
@@ -77,10 +84,10 @@ function Catalog({ slug, cart, setCart }: { slug: string; cart: Record<string, {
       <div className="space-y-2">
         {data?.items.map((i) => (
           <div key={i.id} className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 shadow-sm">
-            <div className="min-w-0"><div className="font-bold leading-tight">{i.name}</div><div className="text-xs text-slate-500">{[i.dci, i.dosage, i.form].filter(Boolean).join(' · ')}</div><div className="mt-1 font-extrabold text-brand">{fcfa(i.salePrice)}</div></div>
+            <div className="min-w-0"><div className="font-bold leading-tight">{i.name}</div><div className="text-xs text-slate-500">{[i.dci, i.dosage, i.form].filter(Boolean).join(' · ')}</div><div className={`mt-1 font-extrabold ${accent ? '' : 'text-brand'}`} style={accent ? { color: accent } : undefined}>{fcfa(i.salePrice)}</div></div>
             <div className="shrink-0 text-right">
               <div className={`mb-1 text-xs font-bold ${i.available ? 'text-emerald-700' : 'text-red-600'}`}>{i.available ? '● Disponible' : '○ Indisponible'}</div>
-              <button disabled={!i.available} onClick={() => add(i)} className="rounded-full bg-brand px-4 py-1.5 text-sm font-bold text-white disabled:opacity-30">{cart[i.id] ? `+1 (${cart[i.id].qty})` : 'Ajouter'}</button>
+              <button disabled={!i.available} onClick={() => add(i)} className={`rounded-full px-4 py-1.5 text-sm font-bold text-white disabled:opacity-30 ${accent ? '' : 'bg-brand'}`} style={accent ? { backgroundColor: accent } : undefined}>{cart[i.id] ? `+1 (${cart[i.id].qty})` : 'Ajouter'}</button>
             </div>
           </div>
         ))}
@@ -93,6 +100,7 @@ function Catalog({ slug, cart, setCart }: { slug: string; cart: Record<string, {
 function Cart({ slug, info, cart, setCart, token, needLogin, done }: { slug: string; info: any; cart: Record<string, { item: Item; qty: number }>; setCart: (c: Record<string, { item: Item; qty: number }>) => void; token: string | null; needLogin: () => void; done: () => void }) {
   const lines = Object.values(cart);
   const total = lines.reduce((s, l) => s + l.item.salePrice * l.qty, 0);
+  const accent = info.primaryColor as string | undefined;
   const [f, setF] = useState({ fulfilment: info.delivery ? 'delivery' : 'pickup', address: '', addressNote: '', paymentMethod: 'mtn_momo', paymentRef: '', note: '' });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -109,10 +117,10 @@ function Cart({ slug, info, cart, setCart, token, needLogin, done }: { slug: str
         <div key={l.item.id} className="flex items-center justify-between rounded-xl bg-white p-3 shadow-sm"><div className="min-w-0"><div className="font-bold leading-tight">{l.item.name}</div><div className="text-sm text-slate-500">{fcfa(l.item.salePrice)} × {l.qty}</div></div>
           <div className="flex items-center gap-2"><button className="h-8 w-8 rounded-full bg-slate-200 font-bold" onClick={() => setQty(l.item.id, -1)}>−</button><b>{l.qty}</b><button className="h-8 w-8 rounded-full bg-slate-200 font-bold" onClick={() => setQty(l.item.id, 1)}>+</button></div></div>
       ))}</div>
-      <div className="flex justify-between rounded-xl bg-white p-3 text-lg font-extrabold shadow-sm"><span>Total</span><span className="text-brand">{fcfa(total)}</span></div>
+      <div className="flex justify-between rounded-xl bg-white p-3 text-lg font-extrabold shadow-sm"><span>Total</span><span className={accent ? '' : 'text-brand'} style={accent ? { color: accent } : undefined}>{fcfa(total)}</span></div>
       <div className="space-y-2 rounded-xl bg-white p-3 shadow-sm">
         <div className="font-extrabold">Réception</div>
-        <div className="flex gap-2">{info.delivery && <button className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${f.fulfilment === 'delivery' ? 'bg-brand text-white' : 'bg-slate-100'}`} onClick={() => setF({ ...f, fulfilment: 'delivery' })}>🛵 Livraison</button>}<button className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${f.fulfilment === 'pickup' ? 'bg-brand text-white' : 'bg-slate-100'}`} onClick={() => setF({ ...f, fulfilment: 'pickup' })}>🏪 Retrait en pharmacie</button></div>
+        <div className="flex gap-2">{info.delivery && <button className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${f.fulfilment === 'delivery' ? (accent ? 'text-white' : 'bg-brand text-white') : 'bg-slate-100'}`} style={f.fulfilment === 'delivery' ? { backgroundColor: accent } : undefined} onClick={() => setF({ ...f, fulfilment: 'delivery' })}>🛵 Livraison</button>}<button className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${f.fulfilment === 'pickup' ? (accent ? 'text-white' : 'bg-brand text-white') : 'bg-slate-100'}`} style={f.fulfilment === 'pickup' ? { backgroundColor: accent } : undefined} onClick={() => setF({ ...f, fulfilment: 'pickup' })}>🏪 Retrait en pharmacie</button></div>
         {f.fulfilment === 'delivery' && <><input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Adresse de livraison (quartier, rue, repère)" value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} /><input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Précision (étage, portail, point de repère)" value={f.addressNote} onChange={(e) => setF({ ...f, addressNote: e.target.value })} /></>}
         <div className="pt-1 font-extrabold">Paiement</div>
         <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={f.paymentMethod} onChange={(e) => setF({ ...f, paymentMethod: e.target.value })}>{PAY.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
@@ -120,7 +128,7 @@ function Cart({ slug, info, cart, setCart, token, needLogin, done }: { slug: str
         <input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Remarque pour la pharmacie (facultatif)" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
       </div>
       {err && <p className="rounded-lg bg-red-50 p-2 text-sm font-bold text-red-700">{err}</p>}
-      <button disabled={busy} onClick={send} className="w-full rounded-xl bg-brand py-4 text-lg font-extrabold text-white shadow disabled:opacity-50">{token ? (busy ? 'Envoi…' : 'Commander') : 'Me connecter pour commander'}</button>
+      <button disabled={busy} onClick={send} className={`w-full rounded-xl py-4 text-lg font-extrabold text-white shadow disabled:opacity-50 ${accent ? '' : 'bg-brand'}`} style={accent ? { backgroundColor: accent } : undefined}>{token ? (busy ? 'Envoi…' : 'Commander') : 'Me connecter pour commander'}</button>
       <p className="text-center text-xs text-slate-500">Les médicaments sur ordonnance ne sont pas vendus en ligne. Le pharmacien peut vous contacter avant de préparer votre commande.</p>
     </div>
   );
@@ -158,7 +166,7 @@ function Orders({ slug, token, info }: { slug: string; token: string; info: any 
   );
 }
 
-function Auth({ slug, registration, onClose, onToken }: { slug: string; registration: boolean; onClose: () => void; onToken: (t: string) => void }) {
+function Auth({ slug, registration, accent, onClose, onToken }: { slug: string; registration: boolean; accent?: string; onClose: () => void; onToken: (t: string) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [f, setF] = useState({ name: '', phone: '', email: '', password: '' });
   const [err, setErr] = useState<string | null>(null);
@@ -172,13 +180,13 @@ function Auth({ slug, registration, onClose, onToken }: { slug: string; registra
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
       <div className="w-full max-w-md space-y-3 rounded-t-2xl bg-white p-5 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex gap-2">{(['login', 'register'] as const).filter((m) => m === 'login' || registration).map((m) => <button key={m} className={`flex-1 rounded-lg py-2 text-sm font-bold ${mode === m ? 'bg-brand text-white' : 'bg-slate-100'}`} onClick={() => setMode(m)}>{m === 'login' ? 'Connexion' : 'Créer mon compte'}</button>)}</div>
+        <div className="flex gap-2">{(['login', 'register'] as const).filter((m) => m === 'login' || registration).map((m) => <button key={m} className={`flex-1 rounded-lg py-2 text-sm font-bold ${mode === m ? (accent ? 'text-white' : 'bg-brand text-white') : 'bg-slate-100'}`} style={mode === m ? { backgroundColor: accent } : undefined} onClick={() => setMode(m)}>{m === 'login' ? 'Connexion' : 'Créer mon compte'}</button>)}</div>
         {mode === 'register' && <input className="w-full rounded-lg border border-slate-300 px-3 py-3" placeholder="Votre nom et prénom" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />}
         <input className="w-full rounded-lg border border-slate-300 px-3 py-3" inputMode="tel" placeholder="Numéro WhatsApp (ex. 06 123 45 67)" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
         {mode === 'register' && <input className="w-full rounded-lg border border-slate-300 px-3 py-3" type="email" placeholder="Adresse e-mail" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />}
         <input className="w-full rounded-lg border border-slate-300 px-3 py-3" type="password" placeholder="Mot de passe (6 caractères minimum)" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter' && ok) go(); }} />
         {err && <p className="text-sm font-bold text-red-700">{err}</p>}
-        <button disabled={!ok || busy} onClick={go} className="w-full rounded-xl bg-brand py-3 text-base font-extrabold text-white disabled:opacity-40">{busy ? '…' : mode === 'login' ? 'Me connecter' : 'Créer mon compte'}</button>
+        <button disabled={!ok || busy} onClick={go} className={`w-full rounded-xl py-3 text-base font-extrabold text-white disabled:opacity-40 ${accent ? '' : 'bg-brand'}`} style={accent ? { backgroundColor: accent } : undefined}>{busy ? '…' : mode === 'login' ? 'Me connecter' : 'Créer mon compte'}</button>
       </div>
     </div>
   );

@@ -15,7 +15,12 @@ export interface Settings {
   /** Horaires de travail (contrôle des arrivées) et verrouillage des onglets par code personnel (journalisation de qui fait quoi). */
   attendance: { start: string; end: string; tolerance: number };
   accessLock: { enabled: boolean };
-  online: { enabled: boolean; hiddenCategoryIds: string[]; hiddenForms: string[]; registration: boolean; delivery: boolean };
+  online: {
+    enabled: boolean; hiddenCategoryIds: string[]; hiddenForms: string[]; registration: boolean; delivery: boolean;
+    /** Identité propre de l'application/site client, distincte de la pharmacie (ex. « Rive Gauche », pas « PharmaCorp »).
+     * Vide = on retombe sur le nom et le logo de la pharmacie (comportement d'avant). */
+    brandName: string; tagline: string; logoUrl: string; primaryColor: string;
+  };
   /**
    * Horaires des caisses : en semaine ordinaire (2 postes) et en semaine de garde (3 postes, dont un de nuit
    * qui traverse minuit). `guardActive` est basculé par le titulaire au début/à la fin d'une garde.
@@ -36,7 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lists: { forms: [], locations: [] },
   ticketFields: { rccm: true, niu: true, authorization: false, patente: false, bank: false, address: true, phone: true, email: false },
   legal: { bankName: '', bankAccount: '' },
-  online: { enabled: false, hiddenCategoryIds: [], hiddenForms: [], registration: true, delivery: false },
+  online: { enabled: false, hiddenCategoryIds: [], hiddenForms: [], registration: true, delivery: false, brandName: '', tagline: '', logoUrl: '', primaryColor: '' },
   cashRegisters: {
     guardActive: false,
     ordinary: [{ number: 1, start: '08:00', end: '13:30' }, { number: 2, start: '13:30', end: '19:00' }],
@@ -61,7 +66,15 @@ export function mergeSettings(cur: unknown, input: unknown): Settings {
   pick('accessLock', (s, b) => ({ enabled: bool(s.enabled, b.enabled) }));
   if ('modules' in i) { const s = obj(i.modules); out.modules = { ...c.modules, ...Object.fromEntries((MODULE_KEYS as readonly string[]).filter((k) => typeof s[k] === 'boolean').map((k) => [k, s[k] as boolean])) }; }
   pick('legal', (s, b) => ({ bankName: 'bankName' in s ? String(s.bankName ?? '').slice(0, 80) : b.bankName, bankAccount: 'bankAccount' in s ? String(s.bankAccount ?? '').slice(0, 80) : b.bankAccount }));
-  pick('online', (s, b) => ({ enabled: bool(s.enabled, b.enabled), registration: bool(s.registration, b.registration), delivery: bool(s.delivery, b.delivery), hiddenCategoryIds: 'hiddenCategoryIds' in s ? strs(s.hiddenCategoryIds, 40, 500) : b.hiddenCategoryIds, hiddenForms: 'hiddenForms' in s ? strs(s.hiddenForms, 60, 200) : b.hiddenForms }));
+  const str = (v: unknown, b: string, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : b);
+  pick('online', (s, b) => ({
+    enabled: bool(s.enabled, b.enabled), registration: bool(s.registration, b.registration), delivery: bool(s.delivery, b.delivery),
+    hiddenCategoryIds: 'hiddenCategoryIds' in s ? strs(s.hiddenCategoryIds, 40, 500) : b.hiddenCategoryIds, hiddenForms: 'hiddenForms' in s ? strs(s.hiddenForms, 60, 200) : b.hiddenForms,
+    brandName: 'brandName' in s ? str(s.brandName, b.brandName, 60) : b.brandName,
+    tagline: 'tagline' in s ? str(s.tagline, b.tagline, 140) : b.tagline,
+    logoUrl: 'logoUrl' in s ? str(s.logoUrl, b.logoUrl, 300) : b.logoUrl,
+    primaryColor: 'primaryColor' in s && /^#[0-9a-fA-F]{6}$/.test(String(s.primaryColor)) ? String(s.primaryColor) : ('primaryColor' in s && s.primaryColor === '' ? '' : b.primaryColor),
+  }));
   const shifts = (v: unknown, b: CashShift[]): CashShift[] => {
     if (!Array.isArray(v)) return b;
     const time = (x: unknown, d: string) => (/^\d{2}:\d{2}$/.test(String(x)) ? String(x) : d);

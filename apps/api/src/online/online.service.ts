@@ -31,7 +31,15 @@ export class OnlineService {
 
   async info(slug: string) {
     const { t, p, online } = await this.tenant(slug);
-    return { name: p?.legalName || t.name, address: p?.address ?? null, city: p?.city ?? null, phone: p?.phone ?? null, registration: online.registration, delivery: online.delivery };
+    // identite propre de l'appli client (ex. « Rive Gauche ») : si non renseignee, on retombe sur celle de la pharmacie.
+    return {
+      name: online.brandName || p?.legalName || t.name,
+      tagline: online.tagline || null,
+      logoUrl: online.logoUrl || null,
+      primaryColor: online.primaryColor || null,
+      address: p?.address ?? null, city: p?.city ?? null, phone: p?.phone ?? null,
+      registration: online.registration, delivery: online.delivery,
+    };
   }
 
   async catalog(slug: string, q?: string, category?: string, take?: string, skip?: string) {
