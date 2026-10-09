@@ -12,7 +12,9 @@ services:
     # ce qui pousse npm a ignorer les devDependencies (typescript, prisma CLI, nest-cli...) sans ce drapeau --
     # tsc tombait alors sur une copie globale non maitrisee de l'image de Render (source du TS5108 persistant).
     buildCommand: npm install --include=dev && npx prisma generate --schema=packages/database/prisma/schema.prisma && npm run build -w @erp/database && npm run build -w @erp/api
-    startCommand: npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma && npm run db:seed && node apps/api/dist/main.js
+    # node sur le JS deja compile (pas "npm run db:seed", qui passe par ts-node : trop gourmand en memoire
+    # pour le plan gratuit de Render, qui a fait planter le premier demarrage avec un heap out of memory).
+    startCommand: npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma && node packages/database/dist/seed.js && node apps/api/dist/main.js
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
