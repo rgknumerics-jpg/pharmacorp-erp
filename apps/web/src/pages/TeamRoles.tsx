@@ -11,9 +11,9 @@ export interface Catalog { groups: string[]; items: Perm[] }
 
 /** Onglets de l'ERP et droit qui les ouvre (même liste que le menu). */
 export const TABS: [string, string][] = [
-  ['Cockpit', 'analytics.read'], ['Tableau de bord', 'reports.read'], ['Conseiller', 'advisor.read'], ['Conseil plantes', 'plants.read'],
-  ['Poste vendeur (POS)', 'sales.ticket'], ['Poste caisse (POS)', 'sales.create'], ['Ventes', 'sales.read'], ['Produits', 'products.read'], ['Stock', 'stock.read'],
-  ['Achats intelligents', 'purchases.read'], ['Fournisseurs', 'purchases.read'], ['Commandes en ligne', 'online.manage'], ['Réception / OCR', 'ocr.use'], ['Clients', 'customers.read'], ['Finances', 'finance.read'],
+  ['Cockpit (+ Résumé du jour)', 'analytics.read'], ['Recommandations', 'advisor.read'], ['Conseil plantes', 'plants.read'],
+  ['Poste vendeur (POS)', 'sales.ticket'], ['Poste caisse (POS)', 'sales.create'], ['Ventes', 'sales.read'], ['Caisses', 'sales.create'], ['Produits', 'products.read'], ['Stock', 'stock.read'],
+  ['Achats', 'purchases.read'], ['Fournisseurs', 'purchases.read'], ['Commandes en ligne', 'online.manage'], ['Réception / OCR', 'ocr.use'], ['Clients', 'customers.read'], ['Finances', 'finance.read'],
   ['Comptabilité', 'accounting.read'], ['Calendrier fiscal', 'tax.read'], ['Paie', 'payroll.read'], ['Formation', 'training.use'],
   ['Journal d’audit', 'audit.read'], ['Reprise des données', 'migration.run'], ['Sauvegardes', 'backup.manage'], ['Équipe et accès', 'users.read'],
   ['Annuaires santé', 'directory.read'], ['Ma structure', 'company.view'], ['Bibliothèque', 'library.read'],

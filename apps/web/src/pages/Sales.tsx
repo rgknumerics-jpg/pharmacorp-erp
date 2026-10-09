@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import StatsOverview from './StatsOverview';
 import CashClosings from './CashClosings';
-import CashSettings from './CashSettings';
 import { api, can } from '../lib/api';
 import { dateFr, dateTimeFr, fcfa, PAY_LABEL, SALE_STATUS } from '../lib/format';
 import { Badge, ErrorBox, Modal, PageTitle, useDebounced, useLoad } from '../components/ui';
@@ -24,7 +23,7 @@ function csv(cols: Col[], rows: Record<string, any>[]) {
 function download(name: string, content: string) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' })); a.download = name; a.click(); }
 
 export default function Sales() {
-  const [tab, setTab] = useState<'tickets' | 'stats' | 'closings' | 'registers'>('tickets');
+  const [tab, setTab] = useState<'tickets' | 'stats' | 'closings'>('tickets');
   return (
     <>
       <PageTitle title="Ventes" sub="Tickets (V vente · A assurance · B bon de pharmacie), filtres et statistiques" />
@@ -32,9 +31,8 @@ export default function Sales() {
         <button className={tab === 'tickets' ? 'btn' : 'btn-alt'} onClick={() => setTab('tickets')}>🧾 Tickets de vente</button>
         <button className={tab === 'stats' ? 'btn' : 'btn-alt'} onClick={() => setTab('stats')}>📊 Statistiques</button>
         {can('reports.read') && <button className={tab === 'closings' ? 'btn' : 'btn-alt'} onClick={() => setTab('closings')}>🌙 Clôtures de caisse</button>}
-        {can('sales.create') && <button className={tab === 'registers' ? 'btn' : 'btn-alt'} onClick={() => setTab('registers')}>⏱️ Caisses</button>}
       </div>
-      {tab === 'tickets' ? <Tickets /> : tab === 'stats' ? <StatsHub /> : tab === 'closings' ? <CashClosings /> : <CashSettings />}
+      {tab === 'tickets' ? <Tickets /> : tab === 'stats' ? <StatsHub /> : <CashClosings />}
     </>
   );
 }

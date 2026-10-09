@@ -11,7 +11,7 @@ export default function Purchasing() {
   const [tab, setTab] = useState<'proposals' | 'reorder' | 'suppliers' | 'invoices' | 'garde'>('proposals');
   return (
     <>
-      <PageTitle title="Achats intelligents" sub="Quoi commander, chez qui, quand payer — et les semaines de garde" />
+      <PageTitle title="Achats" sub="Quoi commander, chez qui, quand payer — et les semaines de garde" />
       <div className="mb-3 flex flex-wrap gap-2">{([['proposals', 'Propositions de commande'], ['reorder', 'Réapprovisionnement'], ['suppliers', 'Fournisseurs'], ['invoices', 'Échéances fournisseurs'], ['garde', 'Semaines de garde']] as const).map(([k, l]) => <button key={k} className={tab === k ? 'btn' : 'btn-alt'} onClick={() => setTab(k)}>{l}</button>)}</div>
       {tab === 'reorder' && <Reorder />}
       {tab === 'proposals' && <Proposals />}

@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { fcfa } from '../lib/format';
 import { Bars, Columns, Kpi } from '../components/charts';
 import { ErrorBox, PageTitle, useLoad } from '../components/ui';
+import Dashboard from './Dashboard';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const LV: Record<string, string> = { rouge: 'border-red-600 bg-red-50', orange: 'border-brand-orange bg-orange-50', vert: 'border-brand bg-brand-soft', info: 'border-blue-400 bg-blue-50' };
@@ -36,12 +37,26 @@ function AiAssistant() {
 }
 
 export default function Cockpit({ go }: { go: (p: string) => void }) {
+  const [tab, setTab] = useState<'cockpit' | 'today'>('cockpit');
   const { data: c, error } = useLoad(() => api<any>('/analytics/cockpit'));
   const { data: ins } = useLoad(() => api<{ level: string; icon: string; text: string }[]>('/analytics/insights'));
   const { data: risks } = useLoad(() => api<{ id: string; level: string; category: string; title: string; detail: string; link?: string }[]>('/analytics/risks'));
+  if (tab === 'today') return (
+    <>
+      <div className="mb-3 flex gap-2">
+        <button className="btn-alt" onClick={() => setTab('cockpit')}>🛩️ Cockpit</button>
+        <button className="btn">📊 Résumé du jour</button>
+      </div>
+      <Dashboard go={go} />
+    </>
+  );
   return (
     <>
       <PageTitle title="Cockpit" sub="Santé de l'entreprise, stock, commercial, clients — et ce qu'il faut faire maintenant" />
+      <div className="mb-3 flex gap-2">
+        <button className="btn">🛩️ Cockpit</button>
+        <button className="btn-alt" onClick={() => setTab('today')}>📊 Résumé du jour</button>
+      </div>
       <ErrorBox error={error} />
       <AiAssistant />
       {ins && ins.length > 0 && <div className="mb-4 space-y-2">{ins.map((i, k) => <div key={k} className={`rounded-xl border-l-4 px-3 py-2 text-sm font-semibold ${LV[i.level]}`}>{i.icon} {i.text}</div>)}</div>}

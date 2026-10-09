@@ -23,18 +23,18 @@ import Payroll from './pages/Payroll';
 import Tax from './pages/Tax';
 import TaxBanner from './components/TaxBanner';
 import Customers from './pages/Customers';
-import Dashboard from './pages/Dashboard';
 import Pos from './pages/Pos';
 import Plants from './pages/Plants';
 import Products from './pages/Products';
 import Receiving from './pages/Receiving';
 import Sales from './pages/Sales';
 import Stock from './pages/Stock';
+import CashSettings from './pages/CashSettings';
 
 /** Onglets principaux et sous-onglets du menu ; un écran absent d'ici reste accessible sous « Autres ». */
 const GROUPS: { key: string; label: string; icon: string; items: string[] }[] = [
-  { key: 'g-pilot', label: 'Pilotage', icon: '🧭', items: ['cockpit', 'dashboard', 'advisor', 'chat'] },
-  { key: 'g-sales', label: 'Ventes et clients', icon: '💳', items: ['sales', 'online', 'customers', 'plants'] },
+  { key: 'g-pilot', label: 'Pilotage', icon: '🧭', items: ['cockpit', 'advisor', 'chat'] },
+  { key: 'g-sales', label: 'Ventes et clients', icon: '💳', items: ['sales', 'cashdesk', 'online', 'customers', 'plants'] },
   { key: 'g-stock', label: 'Produits et stock', icon: '💊', items: ['products', 'stock', 'receiving'] },
   { key: 'g-buy', label: 'Achats et fournisseurs', icon: '🛒', items: ['purchasing', 'suppliers'] },
   { key: 'g-money', label: 'Finances et gestion', icon: '💹', items: ['finance', 'accounting', 'tax', 'payroll'] },
@@ -44,14 +44,14 @@ const GROUPS: { key: string; label: string; icon: string; items: string[] }[] = 
 
 const NAV: { key: string; label: string; icon: string; perm: string }[] = [
   { key: 'cockpit', label: 'Cockpit', icon: '🛩️', perm: 'analytics.read' },
-  { key: 'dashboard', label: 'Tableau de bord', icon: '📊', perm: 'reports.read' },
-  { key: 'advisor', label: 'Conseiller', icon: '🧭', perm: 'advisor.read' },
+  { key: 'advisor', label: 'Recommandations', icon: '🧭', perm: 'advisor.read' },
   { key: 'plants', label: 'Conseil plantes', icon: '🌿', perm: 'plants.read' },
   { key: 'pos', label: 'Caisse', icon: '🧾', perm: 'sales.create' },
   { key: 'sales', label: 'Ventes', icon: '💳', perm: 'sales.read' },
+  { key: 'cashdesk', label: 'Caisses', icon: '⏱️', perm: 'sales.create' },
   { key: 'products', label: 'Produits', icon: '💊', perm: 'products.read' },
   { key: 'stock', label: 'Stock', icon: '📦', perm: 'stock.read' },
-  { key: 'purchasing', label: 'Achats intelligents', icon: '🛒', perm: 'purchases.read' },
+  { key: 'purchasing', label: 'Achats', icon: '🛒', perm: 'purchases.read' },
   { key: 'suppliers', label: 'Fournisseurs', icon: '🚚', perm: 'purchases.read' },
   { key: 'online', label: 'Commandes en ligne', icon: '📱', perm: 'online.manage' },
   { key: 'chat', label: 'Messagerie', icon: '💬', perm: '' },
@@ -76,7 +76,7 @@ const NAV: { key: string; label: string; icon: string; perm: string }[] = [
 /** Écran d'arrivée : la caisse pour un vendeur, sinon le premier onglet autorisé. */
 function landing(perms: string[]): string {
   if ((perms.includes('sales.create') || perms.includes('sales.ticket')) && !perms.includes('analytics.read') && !perms.includes('reports.read')) return 'pos';
-  return NAV.find((n) => n.perm && perms.includes(n.perm))?.key ?? (perms.includes('sales.ticket') ? 'pos' : 'dashboard');
+  return NAV.find((n) => n.perm && perms.includes(n.perm))?.key ?? (perms.includes('sales.ticket') ? 'pos' : 'cockpit');
 }
 
 export default function App() {
@@ -110,7 +110,7 @@ export default function App() {
   if (!session) return <Login onLogged={(s) => { setSession(s); go(landing(s.permissions)); }} />;
   const MODULE_OF: Record<string, string> = { online: 'online', chat: 'chat', plants: 'plants', training: 'training', library: 'library', directory: 'directory', payroll: 'payroll', suppliers: 'suppliers' };
   const items = NAV.filter((n) => (!n.perm || can(n.perm) || (n.key === 'pos' && can('sales.ticket'))) && modules[MODULE_OF[n.key] ?? ''] !== false);
-  const current = items.find((n) => n.key === page) ? page : (items[0]?.key ?? 'dashboard');
+  const current = items.find((n) => n.key === page) ? page : (items[0]?.key ?? 'cockpit');
   // verrouillage des onglets : sauf le titulaire, chacun saisit son code personnel pour ouvrir un onglet (qui fait quoi est journalisé)
   const gateOk = !!(gate && gate.page === current && Date.now() - gate.at < 10 * 60_000);
   // le panneau d'administration est toujours protégé par un code (même pour le titulaire) ; les autres onglets seulement si le verrouillage est activé
@@ -156,7 +156,7 @@ export default function App() {
         </div>
         <div className="mt-2 hidden border-t border-ink-line pt-3 text-xs text-ink-muted md:block">
           <b className="text-ink">{session.user.fullName}</b><br />{session.tenant.name}<br />
-          {accessLock && !can('tenant.manage') && <button className="mr-3 mt-1 font-bold text-brand" onClick={() => { try { sessionStorage.removeItem('erp.tabgate'); } catch { /* ignore */ } setGate(null); if (restoreBaseSession()) { setSession(getSession()); go('dashboard'); } }}>🔒 Verrouiller</button>}<button className="mt-1 font-bold text-red-700" onClick={() => { logout(); setSession(null); }}>Déconnexion</button>
+          {accessLock && !can('tenant.manage') && <button className="mr-3 mt-1 font-bold text-brand" onClick={() => { try { sessionStorage.removeItem('erp.tabgate'); } catch { /* ignore */ } setGate(null); if (restoreBaseSession()) { setSession(getSession()); go('cockpit'); } }}>🔒 Verrouiller</button>}<button className="mt-1 font-bold text-red-700" onClick={() => { logout(); setSession(null); }}>Déconnexion</button>
         </div>
       </nav>
       <div ref={mainRef} className="min-w-0 md:h-screen md:overflow-y-auto">
@@ -185,10 +185,10 @@ export default function App() {
           )}
           </>
         ) : <>
-        {current === 'dashboard' && <Dashboard go={go} />}
         {current === 'pos' && <Pos />}
         {current === 'plants' && <Plants />}
         {current === 'sales' && <Sales />}
+        {current === 'cashdesk' && <CashSettings />}
         {current === 'products' && <Products />}
         {current === 'stock' && <Stock />}
         {current === 'receiving' && <Receiving />}

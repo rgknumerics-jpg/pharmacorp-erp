@@ -10,7 +10,7 @@ export default function Advisor({ go }: { go: (p: string) => void }) {
   const { data, error, reload } = useLoad(() => api<{ insights: Insight[]; disclaimer: string; generatedAt: string }>('/advisor/insights'));
   return (
     <>
-      <PageTitle title="Conseiller" sub="Votre tableau de pilotage : trésorerie, fiscalité, stock, crédit clients, marges — avec des actions concrètes" actions={<button className="btn-alt" onClick={reload}>↻ Actualiser</button>} />
+      <PageTitle title="Recommandations" sub="Trésorerie, fiscalité, stock, crédit clients, marges — avec des actions concrètes" actions={<button className="btn-alt" onClick={reload}>↻ Actualiser</button>} />
       <ErrorBox error={error} />
       {data && (
         <div className="space-y-3">
