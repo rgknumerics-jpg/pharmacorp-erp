@@ -1,4 +1,11 @@
 import { FormEvent, WheelEvent, useEffect, useRef, useState, useCallback } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Compass, CreditCard, Pill, ShoppingCart, TrendingUp, BookOpen, ShieldCheck,
+  Gauge, Lightbulb, Leaf, Receipt, Clock, Package, Truck, Smartphone, MessageCircle,
+  Camera, Users, Calculator, CalendarDays, Wallet, GraduationCap, Lock, Download,
+  HardDrive, UsersRound, BookUser, Building2, Library as LibraryIcon, CalendarClock,
+} from 'lucide-react';
 import { can, getSession, login, logout, Session, setOnExpire, api, switchOperator, restoreBaseSession } from './lib/api';
 import Accounting from './pages/Accounting';
 import Advisor from './pages/Advisor';
@@ -32,45 +39,45 @@ import Stock from './pages/Stock';
 import CashSettings from './pages/CashSettings';
 
 /** Onglets principaux et sous-onglets du menu ; un écran absent d'ici reste accessible sous « Autres ». */
-const GROUPS: { key: string; label: string; icon: string; items: string[] }[] = [
-  { key: 'g-pilot', label: 'Pilotage', icon: '🧭', items: ['cockpit', 'advisor', 'chat'] },
-  { key: 'g-sales', label: 'Ventes et clients', icon: '💳', items: ['sales', 'cashdesk', 'online', 'customers', 'plants'] },
-  { key: 'g-stock', label: 'Produits et stock', icon: '💊', items: ['products', 'stock', 'receiving'] },
-  { key: 'g-buy', label: 'Achats et fournisseurs', icon: '🛒', items: ['purchasing', 'suppliers'] },
-  { key: 'g-money', label: 'Finances et gestion', icon: '💹', items: ['finance', 'accounting', 'tax', 'payroll'] },
-  { key: 'g-know', label: 'Savoir et annuaires', icon: '📚', items: ['training', 'library', 'directory'] },
-  { key: 'g-admin', label: 'Administration', icon: '🏛️', items: ['admin', 'company', 'team', 'timeclock', 'audit', 'backups', 'migration'] },
+const GROUPS: { key: string; label: string; icon: LucideIcon; items: string[] }[] = [
+  { key: 'g-pilot', label: 'Pilotage', icon: Compass, items: ['cockpit', 'advisor', 'chat'] },
+  { key: 'g-sales', label: 'Ventes et clients', icon: CreditCard, items: ['sales', 'cashdesk', 'online', 'customers', 'plants'] },
+  { key: 'g-stock', label: 'Produits et stock', icon: Pill, items: ['products', 'stock', 'receiving'] },
+  { key: 'g-buy', label: 'Achats et fournisseurs', icon: ShoppingCart, items: ['purchasing', 'suppliers'] },
+  { key: 'g-money', label: 'Finances et gestion', icon: TrendingUp, items: ['finance', 'accounting', 'tax', 'payroll'] },
+  { key: 'g-know', label: 'Savoir et annuaires', icon: BookOpen, items: ['training', 'library', 'directory'] },
+  { key: 'g-admin', label: 'Administration', icon: ShieldCheck, items: ['admin', 'company', 'team', 'timeclock', 'audit', 'backups', 'migration'] },
 ];
 
-const NAV: { key: string; label: string; icon: string; perm: string }[] = [
-  { key: 'cockpit', label: 'Cockpit', icon: '🛩️', perm: 'analytics.read' },
-  { key: 'advisor', label: 'Recommandations', icon: '🧭', perm: 'advisor.read' },
-  { key: 'plants', label: 'Conseil plantes', icon: '🌿', perm: 'plants.read' },
-  { key: 'pos', label: 'Caisse', icon: '🧾', perm: 'sales.create' },
-  { key: 'sales', label: 'Ventes', icon: '💳', perm: 'sales.read' },
-  { key: 'cashdesk', label: 'Caisses', icon: '⏱️', perm: 'sales.create' },
-  { key: 'products', label: 'Produits', icon: '💊', perm: 'products.read' },
-  { key: 'stock', label: 'Stock', icon: '📦', perm: 'stock.read' },
-  { key: 'purchasing', label: 'Achats', icon: '🛒', perm: 'purchases.read' },
-  { key: 'suppliers', label: 'Fournisseurs', icon: '🚚', perm: 'purchases.read' },
-  { key: 'online', label: 'Commandes en ligne', icon: '📱', perm: 'online.manage' },
-  { key: 'chat', label: 'Messagerie', icon: '💬', perm: '' },
-  { key: 'timeclock', label: 'Horaires et pointage', icon: '⏱️', perm: 'users.write' },
-  { key: 'admin', label: 'Panneau d’administration', icon: '🛡️', perm: 'tenant.manage' },
-  { key: 'receiving', label: 'Réception / OCR', icon: '📷', perm: 'ocr.use' },
-  { key: 'customers', label: 'Clients', icon: '👥', perm: 'customers.read' },
-  { key: 'finance', label: 'Finances', icon: '💹', perm: 'finance.read' },
-  { key: 'accounting', label: 'Comptabilité', icon: '📒', perm: 'accounting.read' },
-  { key: 'tax', label: 'Calendrier fiscal', icon: '🗓️', perm: 'tax.read' },
-  { key: 'payroll', label: 'Paie', icon: '👔', perm: 'payroll.read' },
-  { key: 'training', label: 'Formation', icon: '🎓', perm: 'training.use' },
-  { key: 'audit', label: 'Journal d’audit', icon: '🔐', perm: 'audit.read' },
-  { key: 'migration', label: 'Reprise des données', icon: '📥', perm: 'migration.run' },
-  { key: 'backups', label: 'Sauvegardes', icon: '💾', perm: 'backup.manage' },
-  { key: 'team', label: 'Équipe et accès', icon: '🧑‍🤝‍🧑', perm: 'users.read' },
-  { key: 'directory', label: 'Annuaires santé', icon: '📇', perm: 'directory.read' },
-  { key: 'company', label: 'Ma structure', icon: '🏛️', perm: 'company.view' },
-  { key: 'library', label: 'Bibliothèque', icon: '📚', perm: 'library.read' },
+const NAV: { key: string; label: string; icon: LucideIcon; perm: string }[] = [
+  { key: 'cockpit', label: 'Cockpit', icon: Gauge, perm: 'analytics.read' },
+  { key: 'advisor', label: 'Recommandations', icon: Lightbulb, perm: 'advisor.read' },
+  { key: 'plants', label: 'Conseil plantes', icon: Leaf, perm: 'plants.read' },
+  { key: 'pos', label: 'Caisse', icon: Receipt, perm: 'sales.create' },
+  { key: 'sales', label: 'Ventes', icon: CreditCard, perm: 'sales.read' },
+  { key: 'cashdesk', label: 'Caisses', icon: Clock, perm: 'sales.create' },
+  { key: 'products', label: 'Produits', icon: Pill, perm: 'products.read' },
+  { key: 'stock', label: 'Stock', icon: Package, perm: 'stock.read' },
+  { key: 'purchasing', label: 'Achats', icon: ShoppingCart, perm: 'purchases.read' },
+  { key: 'suppliers', label: 'Fournisseurs', icon: Truck, perm: 'purchases.read' },
+  { key: 'online', label: 'Commandes en ligne', icon: Smartphone, perm: 'online.manage' },
+  { key: 'chat', label: 'Messagerie', icon: MessageCircle, perm: '' },
+  { key: 'timeclock', label: 'Horaires et pointage', icon: CalendarClock, perm: 'users.write' },
+  { key: 'admin', label: 'Panneau d’administration', icon: ShieldCheck, perm: 'tenant.manage' },
+  { key: 'receiving', label: 'Réception / OCR', icon: Camera, perm: 'ocr.use' },
+  { key: 'customers', label: 'Clients', icon: Users, perm: 'customers.read' },
+  { key: 'finance', label: 'Finances', icon: TrendingUp, perm: 'finance.read' },
+  { key: 'accounting', label: 'Comptabilité', icon: Calculator, perm: 'accounting.read' },
+  { key: 'tax', label: 'Calendrier fiscal', icon: CalendarDays, perm: 'tax.read' },
+  { key: 'payroll', label: 'Paie', icon: Wallet, perm: 'payroll.read' },
+  { key: 'training', label: 'Formation', icon: GraduationCap, perm: 'training.use' },
+  { key: 'audit', label: 'Journal d’audit', icon: Lock, perm: 'audit.read' },
+  { key: 'migration', label: 'Reprise des données', icon: Download, perm: 'migration.run' },
+  { key: 'backups', label: 'Sauvegardes', icon: HardDrive, perm: 'backup.manage' },
+  { key: 'team', label: 'Équipe et accès', icon: UsersRound, perm: 'users.read' },
+  { key: 'directory', label: 'Annuaires santé', icon: BookUser, perm: 'directory.read' },
+  { key: 'company', label: 'Ma structure', icon: Building2, perm: 'company.view' },
+  { key: 'library', label: 'Bibliothèque', icon: LibraryIcon, perm: 'library.read' },
 ];
 
 /** Écran d'arrivée : la caisse pour un vendeur, sinon le premier onglet autorisé. */
@@ -135,7 +142,7 @@ export default function App() {
       <nav className="no-print flex flex-col border-b border-ink-line bg-white p-3 md:h-screen md:overflow-hidden md:border-b-0 md:border-r">
         <div className="mb-2 rounded-xl bg-white p-1"><img src="/logo-erp.png" alt="PHARMACORP ERP — logiciel de gestion" className="h-auto w-full" /></div>
         {can('sales.create') && (
-          <button onClick={() => go('pos')} className={`mb-2 w-full rounded-xl px-3 py-3 text-base font-extrabold text-white shadow ${current === 'pos' ? 'bg-emerald-800' : 'bg-brand hover:bg-emerald-700'}`}>🧾 Lancer la caisse (POS)</button>
+          <button onClick={() => go('pos')} className={`mb-2 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-3 text-base font-extrabold text-white shadow ${current === 'pos' ? 'bg-emerald-800' : 'bg-brand hover:bg-emerald-700'}`}><Receipt className="h-5 w-5" /> Lancer la caisse (POS)</button>
         )}
         <div onWheel={chain} className="flex gap-1 overflow-x-auto md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:overflow-x-hidden md:overscroll-contain md:pr-1">
           {grouped.map((g) => {
@@ -143,15 +150,15 @@ export default function App() {
             const open = openGroups[g.key] ?? hasCurrent;
             return (
               <div key={g.key} className="flex gap-1 md:flex-col">
-                <button onClick={() => setOpenGroups({ ...openGroups, [g.key]: !open })} className={`flex items-center justify-between whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm font-extrabold ${hasCurrent ? 'bg-brand-soft text-brand' : 'hover:bg-slate-50'}`}><span>{g.icon} {g.label}</span><span className="ml-2 hidden text-xs md:inline">{open ? '▾' : '▸'}</span></button>
+                <button onClick={() => setOpenGroups({ ...openGroups, [g.key]: !open })} className={`flex items-center justify-between whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm font-extrabold ${hasCurrent ? 'bg-brand-soft text-brand' : 'hover:bg-slate-50'}`}><span className="flex items-center gap-2"><g.icon className="h-4 w-4 shrink-0" /> {g.label}</span><span className="ml-2 hidden text-xs md:inline">{open ? '▾' : '▸'}</span></button>
                 {open && g.list.map((n) => (
-                  <button key={n.key} onClick={() => go(n.key)} className={`whitespace-nowrap rounded-lg py-1.5 pl-7 pr-3 text-left text-sm font-semibold ${current === n.key ? 'bg-emerald-100 text-brand' : 'text-ink-muted hover:bg-slate-50'}`}>{n.icon} {n.label}{n.key === 'chat' && chatInfo.total > 0 && <span className="ml-2 rounded-full bg-red-600 px-1.5 text-xs text-white">{chatInfo.total}</span>}</button>
+                  <button key={n.key} onClick={() => go(n.key)} className={`flex items-center gap-2 whitespace-nowrap rounded-lg py-1.5 pl-7 pr-3 text-left text-sm font-semibold ${current === n.key ? 'bg-emerald-100 text-brand' : 'text-ink-muted hover:bg-slate-50'}`}><n.icon className="h-4 w-4 shrink-0" /> {n.label}{n.key === 'chat' && chatInfo.total > 0 && <span className="ml-1 rounded-full bg-red-600 px-1.5 text-xs text-white">{chatInfo.total}</span>}</button>
                 ))}
               </div>
             );
           })}
           {others.map((n) => (
-            <button key={n.key} onClick={() => go(n.key)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm font-bold ${current === n.key ? 'bg-brand-soft text-brand' : 'hover:bg-slate-50'}`}>{n.icon} {n.label}</button>
+            <button key={n.key} onClick={() => go(n.key)} className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm font-bold ${current === n.key ? 'bg-brand-soft text-brand' : 'hover:bg-slate-50'}`}><n.icon className="h-4 w-4 shrink-0" /> {n.label}</button>
           ))}
         </div>
         <div className="mt-2 hidden border-t border-ink-line pt-3 text-xs text-ink-muted md:block">
