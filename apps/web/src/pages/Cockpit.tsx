@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { api } from '../lib/api';
 import { fcfa } from '../lib/format';
 import { Bars, Columns, Kpi } from '../components/charts';
@@ -5,6 +6,34 @@ import { ErrorBox, PageTitle, useLoad } from '../components/ui';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const LV: Record<string, string> = { rouge: 'border-red-600 bg-red-50', orange: 'border-brand-orange bg-orange-50', vert: 'border-brand bg-brand-soft', info: 'border-blue-400 bg-blue-50' };
+
+/** Question libre sur les données de la pharmacie (stock, ventes, marges) — répond via l'API, jamais inventé. Invisible si le module « Assistant IA » n'est pas activé (Panneau d'administration). */
+function AiAssistant() {
+  const [q, setQ] = useState('');
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (hidden) return null;
+  async function ask() {
+    if (!q.trim() || busy) return;
+    setBusy(true); setErr(null); setAnswer(null);
+    try { const r = await api<{ answer: string; budgetReached: boolean }>('/ai/ask', { method: 'POST', json: { question: q } }); setAnswer(r.answer); }
+    catch (e) { const err = e as Error & { status?: number }; if (err.status === 403) setHidden(true); else setErr(err.message); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="card mb-4 bg-gradient-to-br from-emerald-50 to-white">
+      <h3 className="mb-2 font-extrabold">🤖 Demander à l’assistant</h3>
+      <div className="flex gap-2">
+        <input className="flex-1" placeholder="Ex. : quels produits vont périmer ce mois-ci ?" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ask()} />
+        <button className="btn" disabled={busy || !q.trim()} onClick={ask}>{busy ? '…' : 'Demander'}</button>
+      </div>
+      <ErrorBox error={err} />
+      {answer && <p className="mt-2 whitespace-pre-wrap rounded-lg bg-white p-3 text-sm">{answer}</p>}
+    </div>
+  );
+}
 
 export default function Cockpit({ go }: { go: (p: string) => void }) {
   const { data: c, error } = useLoad(() => api<any>('/analytics/cockpit'));
@@ -14,6 +43,7 @@ export default function Cockpit({ go }: { go: (p: string) => void }) {
     <>
       <PageTitle title="Cockpit" sub="Santé de l'entreprise, stock, commercial, clients — et ce qu'il faut faire maintenant" />
       <ErrorBox error={error} />
+      <AiAssistant />
       {ins && ins.length > 0 && <div className="mb-4 space-y-2">{ins.map((i, k) => <div key={k} className={`rounded-xl border-l-4 px-3 py-2 text-sm font-semibold ${LV[i.level]}`}>{i.icon} {i.text}</div>)}</div>}
       {risks && risks.length > 0 && (
         <div className="card mb-4">

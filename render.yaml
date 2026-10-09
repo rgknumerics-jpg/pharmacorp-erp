@@ -31,3 +31,8 @@ services:
         value: 15m
       - key: JWT_REFRESH_TTL
         value: 7d
+      # Assistant IA (Pilotage) : facultatif, desactive par defaut (Panneau d'administration -> Fonctions).
+      # Sans cette cle, l'assistant refuse proprement (503) si quelqu'un l'active quand meme -- rien ne casse.
+      # A renseigner le jour du deploiement massif : console.anthropic.com -> API Keys -> coller ici (jamais ici en clair).
+      - key: ANTHROPIC_API_KEY
+        sync: false

@@ -13,11 +13,13 @@ export const MODULES: [string, string, string, string][] = [
   ['library', '📚', 'Bibliothèque', 'Textes légaux et documents de référence.'],
   ['directory', '📇', 'Annuaires santé', 'Délégués, laboratoires, agences, dépôts, districts et formations sanitaires.'],
   ['payroll', '👔', 'Paie', 'Salariés, bulletins, CNSS, ITS.'],
+  ['ai', '🤖', 'Assistant IA (Pilotage)', 'Répond en langage naturel aux questions sur le chiffre d’affaires, les marges, le stock. Coût réel mais faible (plafond mensuel ci-dessous).'],
 ];
 
 /** Panneau d'administration (titulaire / super-administrateur uniquement) : fonctions visibles, politique de caisse, protections et visibilités. */
 export default function AdminPanel({ go }: { go: (p: string) => void }) {
   const { data, error, setData } = useLoad(() => api<any>('/company/settings'), []);
+  const { data: aiUsage } = useLoad(() => api<{ spentUsd: number; capUsd: number; requests: number; month: string }>('/ai/usage').catch(() => null), [data?.modules?.ai]);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   async function toggle(key: string, on: boolean) {
@@ -45,6 +47,13 @@ export default function AdminPanel({ go }: { go: (p: string) => void }) {
             );
           })}
         </div>
+        {data?.modules?.ai !== false && aiUsage && (
+          <div className="rounded-xl bg-slate-50 p-3 text-sm">
+            <b>Assistant IA — dépense de {aiUsage.month}</b>
+            <div className="mt-1 h-2 rounded-full bg-slate-200"><div className="h-2 rounded-full bg-brand" style={{ width: `${Math.min(100, (aiUsage.spentUsd / aiUsage.capUsd) * 100)}%` }} /></div>
+            <p className="mt-1 text-xs text-ink-muted">{aiUsage.spentUsd.toFixed(4)} $ sur {aiUsage.capUsd} $ de plafond mensuel · {aiUsage.requests} question(s) posée(s). Au-delà du plafond, l’assistant se coupe proprement jusqu’au mois suivant.</p>
+          </div>
+        )}
       </div>
       <div className="card mt-4 space-y-2">
         <h3 className="text-lg font-extrabold">Verrouillage des onglets</h3>

@@ -43,6 +43,7 @@ import { AdvisorModule } from './advisor/advisor.module';
 import { PlantsModule } from './plants/plants.module';
 import { SupplierHubModule } from './suppliers/supplier-hub.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { AiModule } from './ai/ai.module';
 import { TrainingModule } from './training/training.module';
 import { BackupModule } from './backup/backup.module';
 import { MigrationModule } from './migration/migration.module';
@@ -90,6 +91,7 @@ import { CashdeskModule } from './cashdesk/cashdesk.module';
     PlantsModule,
     SupplierHubModule,
     AnalyticsModule,
+    AiModule,
     TrainingModule,
     BackupModule,
     MigrationModule,

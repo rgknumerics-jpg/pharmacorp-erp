@@ -87,6 +87,7 @@ model Tenant {
   cashExpenses  CashExpense[]
   cashReserveMoves CashReserveMove[]
   cashVariances CashVariance[]
+  aiUsageMonthly AiUsageMonthly[]
 
   depots Depot[]
 
@@ -1345,6 +1346,25 @@ model CashVariance {
 
   @@index([tenantId, status])
   @@map("cash_variances")
+}
+
+/// Cout de l'assistant IA (Pilotage), cumule par pharmacie et par mois, pour appliquer un plafond mensuel
+/// et ne jamais depasser un budget — jamais de SQL libre, l'IA n'interroge que des outils a perimetre fixe.
+model AiUsageMonthly {
+  tenantId          String   @map("tenant_id") @db.Uuid
+  /// "2026-10"
+  yearMonth         String   @map("year_month")
+  inputTokens       BigInt   @default(0) @map("input_tokens")
+  outputTokens      BigInt   @default(0) @map("output_tokens")
+  /// Cout en milliemes de cent USD (precision suffisante pour Haiku, evite les flottants).
+  costUsdMillicents BigInt   @default(0) @map("cost_usd_millicents")
+  requests          Int      @default(0)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, yearMonth])
+  @@map("ai_usage_monthly")
 }
 
 /// Depense payee directement en especes dans la caisse (comptabilisee D charge / C 571).

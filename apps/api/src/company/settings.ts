@@ -25,11 +25,12 @@ export interface Settings {
 
 export interface CashShift { number: number; start: string; end: string }
 
-export const MODULE_KEYS = ['online', 'chat', 'plants', 'training', 'library', 'directory', 'payroll', 'suppliers'] as const;
+export const MODULE_KEYS = ['online', 'chat', 'plants', 'training', 'library', 'directory', 'payroll', 'suppliers', 'ai'] as const;
 export const DEFAULT_SETTINGS: Settings = {
   attendance: { start: '08:00', end: '18:00', tolerance: 10 },
   accessLock: { enabled: false },
-  modules: { online: false, chat: true, plants: true, training: true, library: true, directory: true, payroll: true, suppliers: true },
+  // IA desactivee par defaut (seul module ici qui a un cout reel) : le titulaire l'active sciemment, jamais par defaut.
+  modules: { online: false, chat: true, plants: true, training: true, library: true, directory: true, payroll: true, suppliers: true, ai: false },
   cashPolicy: { showExpected: false, showTakings: false },
   posLock: { seller: false, cashier: false, direct: true },
   lists: { forms: [], locations: [] },
