@@ -27,6 +27,37 @@ function ListEditor({ title, items, onChange, placeholder }: { title: string; it
   );
 }
 
+const BZV_ZONES = ['Makélékélé', 'Bacongo', 'Poto-Poto', 'Moungali', 'Ouenzé', 'Talangaï', 'Mfilou', 'Madibou', 'Djiri'];
+const PNR_ZONES = ['Lumumba', 'Mvou-Mvou', 'Tié-Tié', 'Loandjili', 'Mongo-Mpoukou', 'Ngoyo'];
+
+/** Zones de livraison (quartier/arrondissement) avec leur frais : aucun tarif de livreur n'est publié de façon fiable
+ * en ligne par quartier, donc l'utilisateur fixe lui-même le frais selon son arrangement avec ses livreurs. */
+function ZoneEditor({ zones, onChange }: { zones: { name: string; fee: number }[]; onChange: (v: { name: string; fee: number }[]) => void }) {
+  const [name, setName] = useState('');
+  const add = (n: string) => { const x = n.trim(); if (x && !zones.some((z) => z.name === x)) onChange([...zones, { name: x, fee: 0 }]); setName(''); };
+  const seed = (list: string[]) => { const have = new Set(zones.map((z) => z.name)); onChange([...zones, ...list.filter((n) => !have.has(n)).map((n) => ({ name: n, fee: 0 }))]); };
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <div className="mb-2 text-sm font-extrabold">Zones de livraison et frais</div>
+      <p className="mb-2 text-xs text-ink-muted">Le client choisit sa zone (quartier) à la commande ; le frais est ajouté au total. Fixez le frais selon votre arrangement avec vos livreurs — aucun tarif de livreur n’est publié de façon fiable en ligne, ces montants vous appartiennent entièrement. Laissez la liste vide pour ne pas distinguer de zones (livraison à frais libre, discuté avec le livreur).</p>
+      <div className="mb-2 space-y-1">{zones.map((z, i) => (
+        <div key={z.name} className="flex items-center gap-2 rounded-lg bg-white p-2 ring-1 ring-ink-line">
+          <span className="flex-1 text-sm font-bold">{z.name}</span>
+          <input type="number" min={0} className="w-28" value={z.fee} onChange={(e) => { const n = [...zones]; n[i] = { ...z, fee: Math.max(0, Math.round(Number(e.target.value) || 0)) }; onChange(n); }} />
+          <span className="text-xs text-ink-muted">FCFA</span>
+          <button className="text-red-600" onClick={() => onChange(zones.filter((_, j) => j !== i))}>×</button>
+        </div>
+      ))}{!zones.length && <span className="text-xs text-ink-muted">Aucune zone définie.</span>}</div>
+      <div className="flex flex-wrap gap-2">
+        <input className="flex-1" placeholder="Nouvelle zone (ex. Bacongo, Loandjili…)" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(name); } }} />
+        <button className="btn-alt" onClick={() => add(name)}>Ajouter</button>
+        <button className="btn-alt" onClick={() => seed(BZV_ZONES)}>+ Arrondissements Brazzaville</button>
+        <button className="btn-alt" onClick={() => seed(PNR_ZONES)}>+ Arrondissements Pointe-Noire</button>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsSection() {
   const write = can('company.manage');
   const { data, error, setData } = useLoad(() => api<any>('/company/settings'), []);
@@ -93,6 +124,7 @@ export function SettingsSection() {
           <Toggle on={data.online.registration} onChange={(v) => set('online', { registration: v })} label="Inscription des clients" />
           <Toggle on={data.online.delivery} onChange={(v) => set('online', { delivery: v })} label="Livraison" hint="Le livreur est notifié à chaque paiement validé" />
         </div>
+        {data.online.delivery && <ZoneEditor zones={data.online.deliveryZones} onChange={(v) => set('online', { deliveryZones: v })} />}
         <div className="rounded-xl bg-slate-50 p-3">
           <div className="mb-2 text-sm font-extrabold">Habillage (nom, logo, couleur)</div>
           <p className="mb-2 text-xs text-ink-muted">Laissez vide pour reprendre le nom et le logo de la pharmacie. Renseignez ces champs si l’application client a sa propre marque (ex. « Rive Gauche »).</p>

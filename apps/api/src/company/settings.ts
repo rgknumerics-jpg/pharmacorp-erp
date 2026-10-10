@@ -20,6 +20,10 @@ export interface Settings {
     /** Identité propre de l'application/site client, distincte de la pharmacie (ex. « Rive Gauche », pas « PharmaCorp »).
      * Vide = on retombe sur le nom et le logo de la pharmacie (comportement d'avant). */
     brandName: string; tagline: string; logoUrl: string; primaryColor: string;
+    /** Zones de livraison (quartier/commune) avec leur frais : le client choisit sa zone au lieu d'une adresse libre,
+     * le frais est ajouté au total. Le titulaire définit lui-même les frais selon son arrangement avec ses livreurs
+     * (aucun tarif fiable par quartier n'est publié en ligne à ce jour). */
+    deliveryZones: { name: string; fee: number }[];
   };
   /**
    * Horaires des caisses : en semaine ordinaire (2 postes) et en semaine de garde (3 postes, dont un de nuit
@@ -41,7 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lists: { forms: [], locations: [] },
   ticketFields: { rccm: true, niu: true, authorization: false, patente: false, bank: false, address: true, phone: true, email: false },
   legal: { bankName: '', bankAccount: '' },
-  online: { enabled: false, hiddenCategoryIds: [], hiddenForms: [], registration: true, delivery: false, brandName: '', tagline: '', logoUrl: '', primaryColor: '' },
+  online: { enabled: false, hiddenCategoryIds: [], hiddenForms: [], registration: true, delivery: false, brandName: '', tagline: '', logoUrl: '', primaryColor: '', deliveryZones: [] },
   cashRegisters: {
     guardActive: false,
     ordinary: [{ number: 1, start: '08:00', end: '13:30' }, { number: 2, start: '13:30', end: '19:00' }],
@@ -67,6 +71,10 @@ export function mergeSettings(cur: unknown, input: unknown): Settings {
   if ('modules' in i) { const s = obj(i.modules); out.modules = { ...c.modules, ...Object.fromEntries((MODULE_KEYS as readonly string[]).filter((k) => typeof s[k] === 'boolean').map((k) => [k, s[k] as boolean])) }; }
   pick('legal', (s, b) => ({ bankName: 'bankName' in s ? String(s.bankName ?? '').slice(0, 80) : b.bankName, bankAccount: 'bankAccount' in s ? String(s.bankAccount ?? '').slice(0, 80) : b.bankAccount }));
   const str = (v: unknown, b: string, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : b);
+  const zones = (v: unknown, b: { name: string; fee: number }[]): { name: string; fee: number }[] => {
+    if (!Array.isArray(v)) return b;
+    return v.slice(0, 60).map((z) => { const o = obj(z); return { name: String(o.name ?? '').trim().slice(0, 60), fee: Math.min(100_000, Math.max(0, Math.round(Number(o.fee ?? 0)) || 0)) }; }).filter((z) => z.name);
+  };
   pick('online', (s, b) => ({
     enabled: bool(s.enabled, b.enabled), registration: bool(s.registration, b.registration), delivery: bool(s.delivery, b.delivery),
     hiddenCategoryIds: 'hiddenCategoryIds' in s ? strs(s.hiddenCategoryIds, 40, 500) : b.hiddenCategoryIds, hiddenForms: 'hiddenForms' in s ? strs(s.hiddenForms, 60, 200) : b.hiddenForms,
@@ -74,6 +82,7 @@ export function mergeSettings(cur: unknown, input: unknown): Settings {
     tagline: 'tagline' in s ? str(s.tagline, b.tagline, 140) : b.tagline,
     logoUrl: 'logoUrl' in s ? str(s.logoUrl, b.logoUrl, 500_000) : b.logoUrl,
     primaryColor: 'primaryColor' in s && /^#[0-9a-fA-F]{6}$/.test(String(s.primaryColor)) ? String(s.primaryColor) : ('primaryColor' in s && s.primaryColor === '' ? '' : b.primaryColor),
+    deliveryZones: 'deliveryZones' in s ? zones(s.deliveryZones, b.deliveryZones) : b.deliveryZones,
   }));
   const shifts = (v: unknown, b: CashShift[]): CashShift[] => {
     if (!Array.isArray(v)) return b;

@@ -7,11 +7,17 @@ import { AuthenticatedUser } from '../common/interfaces/jwt-payload.interface';
 import { nextNumber } from '../common/numbering';
 import { normalizePhone } from '../common/phone.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { bestPromotion } from '../sales/sales.service';
 import { SalesService } from '../sales/sales.service';
 import { courseText, Hist, notify, ORDER_STATUS } from './online-events';
 import { PortalAuth, PortalToken } from './portal-auth';
 
 const METHODS = ['mtn_momo', 'airtel_money', 'cash'];
+/** Promotions actives aujourd'hui (meme regle que la caisse POS, sales.service.ts) -- appliquees aussi a la boutique en ligne. */
+const activePromotions = (tx: Prisma.TransactionClient) => {
+  const today = new Date(new Date().toISOString().slice(0, 10));
+  return tx.promotion.findMany({ where: { isActive: true, startDate: { lte: today }, endDate: { gte: today } } });
+};
 const NEXT_STAFF: Record<string, string[]> = { new: ['accepted', 'cancelled'], accepted: ['ready', 'cancelled'], ready: ['out', 'delivered', 'cancelled'], out: ['delivered'], delivered: [], cancelled: [] };
 const hist = (o: { history: unknown }, action: string, by?: string | null): Prisma.InputJsonValue => [...(((o.history as Hist[]) ?? []).slice(-40)), { at: new Date().toISOString(), action, by: by ?? null }] as unknown as Prisma.InputJsonValue;
 
@@ -39,6 +45,7 @@ export class OnlineService {
       primaryColor: online.primaryColor || null,
       address: p?.address ?? null, city: p?.city ?? null, phone: p?.phone ?? null,
       registration: online.registration, delivery: online.delivery,
+      deliveryZones: online.deliveryZones,
     };
   }
 
@@ -56,14 +63,21 @@ export class OnlineService {
         ...(category ? { categoryId: category } : {}),
         ...(q?.trim() ? { name: { contains: q.trim().slice(0, 60), mode: 'insensitive' as const } } : {}),
       };
-      const [items, total] = await Promise.all([
+      const [items, total, promos] = await Promise.all([
         tx.product.findMany({ where, orderBy: { name: 'asc' }, take: n, skip: s, select: { id: true, name: true, dci: true, form: true, dosage: true, salePrice: true, categoryId: true } }),
         tx.product.count({ where }),
+        activePromotions(tx),
       ]);
       const ids = items.map((i) => i.id);
       const stock = ids.length ? await tx.inventoryMovement.groupBy({ by: ['productId'], where: { productId: { in: ids } }, _sum: { quantity: true } }) : [];
       const on = new Map(stock.map((x) => [x.productId, x._sum.quantity ?? 0]));
-      return { total, categories: cats.map((c) => ({ id: c.id, name: c.name })), items: items.map((i) => ({ ...i, available: (on.get(i.id) ?? 0) > 0 })) };
+      return {
+        total, categories: cats.map((c) => ({ id: c.id, name: c.name })),
+        items: items.map((i) => {
+          const promo = bestPromotion(promos, i, 1, i.salePrice);
+          return { ...i, available: (on.get(i.id) ?? 0) > 0, promoPrice: promo ? i.salePrice - promo.discount : null, promoLabel: promo?.name ?? null };
+        }),
+      };
     });
   }
 
@@ -120,12 +134,20 @@ export class OnlineService {
   }
 
   // ------------------------------------------------------------------ commandes du client
-  async createOrder(slug: string, header: string | undefined, b: { items?: { productId: string; quantity: number }[]; fulfilment?: string; address?: string; addressNote?: string; paymentMethod?: string; paymentRef?: string; note?: string; phone?: string }) {
+  async createOrder(slug: string, header: string | undefined, b: { items?: { productId: string; quantity: number }[]; fulfilment?: string; address?: string; addressNote?: string; zone?: string; paymentMethod?: string; paymentRef?: string; note?: string; phone?: string }) {
     const { t, online, acc } = await this.account(slug, header);
     const fulfilment = b.fulfilment === 'pickup' ? 'pickup' : 'delivery';
     if (fulfilment === 'delivery' && !online.delivery) throw new BadRequestException('La livraison n’est pas proposée : choisissez le retrait en pharmacie.');
     const address = (b.address ?? '').trim().slice(0, 240);
     if (fulfilment === 'delivery' && address.length < 5) throw new BadRequestException('Indiquez votre adresse de livraison.');
+    let deliveryFee = 0;
+    let zoneName: string | null = null;
+    if (fulfilment === 'delivery' && online.deliveryZones.length) {
+      const zone = online.deliveryZones.find((z) => z.name === (b.zone ?? ''));
+      if (!zone) throw new BadRequestException('Choisissez votre zone de livraison.');
+      deliveryFee = zone.fee;
+      zoneName = zone.name;
+    }
     const method = METHODS.includes(b.paymentMethod ?? '') ? (b.paymentMethod as string) : null;
     if (!method) throw new BadRequestException('Choisissez le mode de paiement.');
     const lines = (Array.isArray(b.items) ? b.items : []).map((l) => ({ productId: String(l.productId), quantity: Math.round(Number(l.quantity)) })).filter((l) => l.productId && l.quantity >= 1 && l.quantity <= 20).slice(0, 40);
@@ -136,18 +158,22 @@ export class OnlineService {
       const by = new Map(prods.map((p) => [p.id, p]));
       const stock = await tx.inventoryMovement.groupBy({ by: ['productId'], where: { productId: { in: [...by.keys()] } }, _sum: { quantity: true } });
       const on = new Map(stock.map((x) => [x.productId, x._sum.quantity ?? 0]));
+      const promos = await activePromotions(tx);
       const items = lines.map((l) => {
         const p = by.get(l.productId);
         if (!p || online.hiddenCategoryIds.includes(p.categoryId ?? '')) throw new BadRequestException('Un produit de votre panier n’est plus proposé.');
         if ((on.get(p.id) ?? 0) < l.quantity) throw new BadRequestException(`« ${p.name} » n’est plus disponible en quantité suffisante.`);
-        return { productId: p.id, name: p.name, quantity: l.quantity, unitPrice: p.salePrice };
+        const promo = bestPromotion(promos, p, l.quantity, p.salePrice);
+        const lineTotal = p.salePrice * l.quantity - (promo?.discount ?? 0);
+        return { productId: p.id, name: p.name, quantity: l.quantity, unitPrice: p.salePrice, lineTotal, promo: promo?.name ?? null };
       });
-      const subtotal = items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+      const subtotal = items.reduce((s, i) => s + i.lineTotal, 0);
       const ref = (b.paymentRef ?? '').trim().slice(0, 60) || null;
       return tx.onlineOrder.create({
         data: {
           tenantId: t.id, number: await nextNumber(tx, t.id, 'CO'), accountId: acc.id, customerId: acc.customerId, items: items as unknown as Prisma.InputJsonValue,
-          subtotal, deliveryFee: 0, total: subtotal, fulfilment, address: fulfilment === 'delivery' ? address : null, addressNote: (b.addressNote ?? '').trim().slice(0, 160) || null, phone,
+          subtotal, deliveryFee, total: subtotal + deliveryFee, fulfilment, address: fulfilment === 'delivery' ? address : null,
+          addressNote: ((zoneName ? `Zone : ${zoneName}. ` : '') + (b.addressNote ?? '').trim().slice(0, 160)) || null, phone,
           paymentMethod: method, paymentRef: method === 'cash' ? null : ref, paymentStatus: method === 'cash' ? 'cod' : ref ? 'declared' : 'pending', note: (b.note ?? '').trim().slice(0, 300) || null,
           history: [{ at: new Date().toISOString(), action: 'Commande passée' }] as unknown as Prisma.InputJsonValue,
         },

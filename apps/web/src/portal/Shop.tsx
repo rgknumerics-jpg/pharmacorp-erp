@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { alertUser, fcfa, papi, store } from './portalApi';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-interface Item { id: string; name: string; dci?: string | null; form?: string | null; dosage?: string | null; salePrice: number; categoryId?: string | null; available: boolean }
+interface Item { id: string; name: string; dci?: string | null; form?: string | null; dosage?: string | null; salePrice: number; categoryId?: string | null; available: boolean; promoPrice?: number | null; promoLabel?: string | null }
 const PAY: [string, string][] = [['mtn_momo', 'MTN Mobile Money'], ['airtel_money', 'Airtel Money'], ['cash', 'Espèces (à la livraison / au comptoir)']];
 const STEPS = ['new', 'accepted', 'ready', 'out', 'delivered'];
 const STEP_LABEL: Record<string, string> = { new: 'Reçue', accepted: 'En préparation', ready: 'Prête', out: 'En route', delivered: 'Livrée', cancelled: 'Annulée' };
@@ -110,10 +110,15 @@ function Catalog({ slug, cart, setCart, accent, onCart, count }: { slug: string;
           <div key={i.id} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm">
             <div className="flex h-24 items-center justify-center text-4xl" style={{ backgroundColor: `${accent ?? '#047234'}14` }}>{CAT_ICON[k % CAT_ICON.length]}</div>
             <div className="flex flex-1 flex-col gap-1 p-2.5">
+              {i.promoLabel && <span className="w-fit rounded-full bg-red-600 px-2 py-0.5 text-[9px] font-extrabold text-white">{i.promoLabel}</span>}
               <div className="line-clamp-2 min-h-[2.4em] text-sm font-bold leading-tight">{i.name}</div>
               {(i.dci || i.dosage) && <div className="text-[11px] text-slate-500">{[i.dci, i.dosage, i.form].filter(Boolean).join(' · ')}</div>}
               <div className="mt-auto flex items-center justify-between pt-1">
-                <span className="font-extrabold" style={accent ? { color: accent } : undefined}>{fcfa(i.salePrice)}</span>
+                {i.promoPrice != null ? (
+                  <span className="flex flex-col"><span className="text-[11px] text-slate-400 line-through">{fcfa(i.salePrice)}</span><span className="font-extrabold text-red-600">{fcfa(i.promoPrice)}</span></span>
+                ) : (
+                  <span className="font-extrabold" style={accent ? { color: accent } : undefined}>{fcfa(i.salePrice)}</span>
+                )}
                 {!i.available && <span className="text-[10px] font-bold text-red-600">Indispo.</span>}
               </div>
               <button disabled={!i.available} onClick={() => add(i)} className="w-full rounded-full py-1.5 text-xs font-extrabold text-white disabled:bg-slate-300 disabled:opacity-60" style={i.available ? { backgroundColor: accent ?? '#047234' } : undefined}>{cart[i.id] ? `Ajouté ×${cart[i.id].qty}` : '+ Ajouter'}</button>
@@ -134,29 +139,40 @@ function Catalog({ slug, cart, setCart, accent, onCart, count }: { slug: string;
 
 function Cart({ slug, info, cart, setCart, token, needLogin, done }: { slug: string; info: any; cart: Record<string, { item: Item; qty: number }>; setCart: (c: Record<string, { item: Item; qty: number }>) => void; token: string | null; needLogin: () => void; done: () => void }) {
   const lines = Object.values(cart);
-  const total = lines.reduce((s, l) => s + l.item.salePrice * l.qty, 0);
+  const zones = (info.deliveryZones ?? []) as { name: string; fee: number }[];
   const accent = info.primaryColor as string | undefined;
-  const [f, setF] = useState({ fulfilment: info.delivery ? 'delivery' : 'pickup', address: '', addressNote: '', paymentMethod: 'mtn_momo', paymentRef: '', note: '' });
+  const [f, setF] = useState({ fulfilment: info.delivery ? 'delivery' : 'pickup', address: '', addressNote: '', zone: '', paymentMethod: 'mtn_momo', paymentRef: '', note: '' });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const deliveryFee = f.fulfilment === 'delivery' && zones.length ? (zones.find((z) => z.name === f.zone)?.fee ?? 0) : 0;
+  const total = lines.reduce((s, l) => s + (l.item.promoPrice ?? l.item.salePrice) * l.qty, 0) + deliveryFee;
   if (!lines.length) return <p className="p-8 text-center text-slate-500">Votre panier est vide.</p>;
   const setQty = (id: string, d: number) => { const l = cart[id]; const q = l.qty + d; const n = { ...cart }; if (q <= 0) delete n[id]; else n[id] = { ...l, qty: Math.min(20, q) }; setCart(n); };
   async function send() {
     if (!token) { needLogin(); return; }
+    if (f.fulfilment === 'delivery' && zones.length && !f.zone) { setErr('Choisissez votre zone de livraison.'); return; }
     setBusy(true); setErr(null);
     try { await papi(`/online/${slug}/orders`, { token, json: { items: lines.map((l) => ({ productId: l.item.id, quantity: l.qty })), ...f } }); done(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   }
   return (
     <div className="space-y-3">
       <div className="space-y-2">{lines.map((l) => (
-        <div key={l.item.id} className="flex items-center justify-between rounded-xl bg-white p-3 shadow-sm"><div className="min-w-0"><div className="font-bold leading-tight">{l.item.name}</div><div className="text-sm text-slate-500">{fcfa(l.item.salePrice)} × {l.qty}</div></div>
+        <div key={l.item.id} className="flex items-center justify-between rounded-xl bg-white p-3 shadow-sm"><div className="min-w-0"><div className="font-bold leading-tight">{l.item.name}</div><div className="text-sm text-slate-500">{l.item.promoPrice != null ? <><span className="line-through">{fcfa(l.item.salePrice)}</span> <span className="font-bold text-red-600">{fcfa(l.item.promoPrice)}</span></> : fcfa(l.item.salePrice)} × {l.qty}</div></div>
           <div className="flex items-center gap-2"><button className="h-8 w-8 rounded-full bg-slate-200 font-bold" onClick={() => setQty(l.item.id, -1)}>−</button><b>{l.qty}</b><button className="h-8 w-8 rounded-full bg-slate-200 font-bold" onClick={() => setQty(l.item.id, 1)}>+</button></div></div>
       ))}</div>
+      {deliveryFee > 0 && <div className="flex justify-between rounded-xl bg-white px-3 py-2 text-sm text-slate-600 shadow-sm"><span>Frais de livraison ({f.zone})</span><span>{fcfa(deliveryFee)}</span></div>}
       <div className="flex justify-between rounded-xl bg-white p-3 text-lg font-extrabold shadow-sm"><span>Total</span><span className={accent ? '' : 'text-brand'} style={accent ? { color: accent } : undefined}>{fcfa(total)}</span></div>
       <div className="space-y-2 rounded-xl bg-white p-3 shadow-sm">
         <div className="font-extrabold">Réception</div>
         <div className="flex gap-2">{info.delivery && <button className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${f.fulfilment === 'delivery' ? (accent ? 'text-white' : 'bg-brand text-white') : 'bg-slate-100'}`} style={f.fulfilment === 'delivery' ? { backgroundColor: accent } : undefined} onClick={() => setF({ ...f, fulfilment: 'delivery' })}>🛵 Livraison</button>}<button className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${f.fulfilment === 'pickup' ? (accent ? 'text-white' : 'bg-brand text-white') : 'bg-slate-100'}`} style={f.fulfilment === 'pickup' ? { backgroundColor: accent } : undefined} onClick={() => setF({ ...f, fulfilment: 'pickup' })}>🏪 Retrait en pharmacie</button></div>
-        {f.fulfilment === 'delivery' && <><input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Adresse de livraison (quartier, rue, repère)" value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} /><input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Précision (étage, portail, point de repère)" value={f.addressNote} onChange={(e) => setF({ ...f, addressNote: e.target.value })} /></>}
+        {f.fulfilment === 'delivery' && <>
+          {zones.length > 0 && <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={f.zone} onChange={(e) => setF({ ...f, zone: e.target.value })}>
+            <option value="">— Choisir votre zone —</option>
+            {zones.map((z) => <option key={z.name} value={z.name}>{z.name} ({fcfa(z.fee)})</option>)}
+          </select>}
+          <input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Adresse de livraison (quartier, rue, repère)" value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} />
+          <input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Précision (étage, portail, point de repère)" value={f.addressNote} onChange={(e) => setF({ ...f, addressNote: e.target.value })} />
+        </>}
         <div className="pt-1 font-extrabold">Paiement</div>
         <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={f.paymentMethod} onChange={(e) => setF({ ...f, paymentMethod: e.target.value })}>{PAY.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
         {f.paymentMethod !== 'cash' && <div className="rounded-lg bg-amber-50 p-2 text-sm text-amber-900">Envoyez <b>{fcfa(total)}</b> {info.phone ? <>au <b>{info.phone}</b> </> : null}par {f.paymentMethod === 'mtn_momo' ? 'MTN Mobile Money' : 'Airtel Money'}, puis indiquez la référence reçue (vous pouvez aussi la saisir plus tard dans « Mes commandes »).<input className="mt-2 w-full rounded-lg border border-amber-300 bg-white px-3 py-2" placeholder="Référence de la transaction" value={f.paymentRef} onChange={(e) => setF({ ...f, paymentRef: e.target.value })} /></div>}
