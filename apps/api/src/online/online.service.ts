@@ -82,7 +82,7 @@ export class OnlineService {
     const acc = await this.prisma.forTenant(t.id, async (tx) => {
       if (await tx.customerAccount.findFirst({ where: { phone } })) throw new ConflictException('Un compte existe déjà avec ce numéro : connectez-vous.');
       let customer = await tx.customer.findFirst({ where: { phone, isActive: true } });
-      if (!customer) customer = await tx.customer.create({ data: { tenantId: t.id, name, phone, email, address: (b.address ?? '').trim().slice(0, 200) || null, kind: 'particulier' } });
+      if (!customer) customer = await tx.customer.create({ data: { tenantId: t.id, name, phone, email, address: (b.address ?? '').trim().slice(0, 200) || null, kind: 'particulier', source: 'online' } });
       else if (!customer.email) await tx.customer.update({ where: { id: customer.id }, data: { email } });
       return tx.customerAccount.create({ data: { tenantId: t.id, customerId: customer.id, phone, passwordHash: await bcrypt.hash(b.password as string, 10) } });
     });

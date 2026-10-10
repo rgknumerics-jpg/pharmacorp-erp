@@ -20,13 +20,19 @@ export class CustomersService {
     private readonly auditLog: AuditLogService,
   ) {}
 
-  async search(tenantId: string, q: string | undefined, take: number, skip: number) {
+  /**
+   * `source` : par defaut ne montre que les clients "pos" (venus en pharmacie) -- un client "online"
+   * (boutique en ligne) ne doit jamais se melanger a ce fichier ni etre eligible au credit (ARCHITECTURE.md
+   * -- Clients) ; il reste suivi depuis Commandes en ligne. `source=online` ou `source=all` l'incluent explicitement.
+   */
+  async search(tenantId: string, q: string | undefined, take: number, skip: number, source: string = 'pos') {
     const term = q?.trim();
     const digits = term?.replace(/\D/g, '');
     return this.prisma.forTenant(tenantId, async (tx) => {
       const rows = await tx.customer.findMany({
         where: {
           isActive: true,
+          ...(source !== 'all' ? { source } : {}),
           ...(term
             ? { OR: [{ name: { contains: term, mode: 'insensitive' } }, ...(digits && digits.length >= 4 ? [{ phone: { contains: digits } }] : [])] }
             : {}),
@@ -86,7 +92,11 @@ export class CustomersService {
     const phone = dto.phone !== undefined ? normalizePhone(dto.phone) : undefined;
     if (dto.phone && !phone) throw new BadRequestException('Numero de telephone invalide');
     const c = await this.prisma.forTenant(user.tenantId, async (tx) => {
-      if (!(await tx.customer.findUnique({ where: { id } }))) throw new NotFoundException('Client introuvable');
+      const cur = await tx.customer.findUnique({ where: { id } });
+      if (!cur) throw new NotFoundException('Client introuvable');
+      if (cur.source === 'online' && dto.creditLimit !== undefined && dto.creditLimit > 0) {
+        throw new BadRequestException('Un client venu de la boutique en ligne n’est pas éligible au crédit.');
+      }
       return tx.customer.update({ where: { id }, data: { ...dto, ...(dto.birthDate ? { birthDate: new Date(dto.birthDate) } : {}), ...(phone !== undefined ? { phone } : {}) } });
     });
     if (dto.creditLimit !== undefined) {

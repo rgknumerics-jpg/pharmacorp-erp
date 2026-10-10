@@ -117,11 +117,16 @@ export class SalesService {
       const today = new Date(new Date().toISOString().slice(0, 10));
       const promos = await tx.promotion.findMany({ where: { isActive: true, startDate: { lte: today }, endDate: { gte: today } } });
 
-      let customer: { id: string; creditLimit: number; creditBalance: number; isActive: boolean } | null = null;
+      let customer: { id: string; creditLimit: number; creditBalance: number; isActive: boolean; source: string } | null = null;
       if (dto.customerId) {
         await tx.$queryRaw`SELECT id FROM customers WHERE id = ${dto.customerId}::uuid FOR UPDATE`;
         customer = await tx.customer.findUnique({ where: { id: dto.customerId } });
         if (!customer || !customer.isActive) throw new NotFoundException('Client introuvable');
+        // Client venu de la boutique en ligne : jamais de credit (ARCHITECTURE.md -- Clients), meme si un
+        // plafond a ete force par ailleurs.
+        if (customer.source === 'online' && (dto.payments ?? []).some((p) => p.method === 'credit')) {
+          throw new BadRequestException('Ce client est venu de la boutique en ligne : pas de vente à crédit.');
+        }
       }
 
       // type de vente : A = tiers payant (assurance), B = bon de pharmacie (credit), V = vente

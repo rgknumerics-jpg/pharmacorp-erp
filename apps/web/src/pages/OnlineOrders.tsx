@@ -10,7 +10,7 @@ const METH: Record<string, string> = { mtn_momo: 'MTN MoMo', airtel_money: 'Airt
 
 /** Commandes passées depuis l'application client / le site : acceptation (devient une vente), livreur, paiement, statut. */
 export default function OnlineOrders() {
-  const [tab, setTab] = useState<'orders' | 'couriers' | 'links'>('orders');
+  const [tab, setTab] = useState<'orders' | 'customers' | 'couriers' | 'links'>('orders');
   const [status, setStatus] = useState('open');
   const { data, error, reload } = useLoad(() => api<any[]>(`/online-orders?status=${status}`), [status]) as any;
   const { data: sum, reload: reSum } = useLoad(() => api<any>('/online-orders/summary'), []) as any;
@@ -27,7 +27,7 @@ export default function OnlineOrders() {
     <>
       <PageTitle title="Commandes en ligne" sub="Commandes de l’application client et du site web : acceptation, paiement, livreur" />
       <div className="mb-3 flex flex-wrap gap-2">
-        {([['orders', 'Commandes'], ['couriers', 'Livreurs'], ['links', 'Liens à partager']] as const).map(([k, l]) => <button key={k} className={tab === k ? 'btn' : 'btn-alt'} onClick={() => setTab(k)}>{l}{k === 'orders' && sum?.new ? <span className="ml-2 rounded-full bg-red-600 px-2 text-xs text-white">{sum.new}</span> : null}</button>)}
+        {([['orders', 'Commandes'], ['customers', 'Clients en ligne'], ['couriers', 'Livreurs'], ['links', 'Liens à partager']] as const).map(([k, l]) => <button key={k} className={tab === k ? 'btn' : 'btn-alt'} onClick={() => setTab(k)}>{l}{k === 'orders' && sum?.new ? <span className="ml-2 rounded-full bg-red-600 px-2 text-xs text-white">{sum.new}</span> : null}</button>)}
       </div>
       <ErrorBox error={err ?? error} />
 
@@ -61,6 +61,8 @@ export default function OnlineOrders() {
         </>
       )}
 
+      {tab === 'customers' && <OnlineCustomers />}
+
       {tab === 'couriers' && (
         <div className="card">
           <table className="w-full text-sm"><thead><tr><th>Livreur</th><th>Téléphone</th><th>État</th><th /></tr></thead>
@@ -79,6 +81,26 @@ export default function OnlineOrders() {
       )}
       {courierModal && <CourierForm c={courierModal} onClose={() => setCourierModal(null)} onSaved={() => { setCourierModal(null); reCouriers(); }} />}
     </>
+  );
+}
+
+/** Clients venus de la boutique en ligne : population distincte des clients « pos » (pharmacie), jamais
+ * eligible au credit — suivis ici plutot que melanges dans Clients. */
+function OnlineCustomers() {
+  const { data, error } = useLoad(() => api<any[]>('/customers?source=online&take=200'), []) as any;
+  return (
+    <div className="card overflow-auto">
+      <p className="mb-2 text-xs text-ink-muted">Clients inscrits depuis la boutique en ligne — jamais de vente à crédit pour cette population.</p>
+      <ErrorBox error={error} />
+      <table className="w-full text-sm"><thead><tr><th className="text-left">Client</th><th>Téléphone</th><th>Inscrit le</th></tr></thead>
+        <tbody>{data?.map((c: any) => (
+          <tr key={c.id}><td><b>{c.name}</b><div className="text-xs text-ink-muted">{c.email}</div></td>
+            <td>{c.phone ? <a className="text-brand underline" href={`https://wa.me/${c.phone}`} target="_blank" rel="noreferrer">{c.phone}</a> : '—'}</td>
+            <td className="text-xs text-ink-muted">{new Date(c.createdAt).toLocaleDateString('fr-FR')}</td></tr>
+        ))}</tbody>
+      </table>
+      {data && !data.length && <p className="p-3 text-sm text-ink-muted">Aucun client inscrit depuis la boutique pour l’instant.</p>}
+    </div>
   );
 }
 

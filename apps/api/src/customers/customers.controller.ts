@@ -19,8 +19,9 @@ export class CustomersController {
     @Query('q') q?: string,
     @Query('take', new ParseIntPipe({ optional: true })) take = 30,
     @Query('skip', new ParseIntPipe({ optional: true })) skip = 0,
+    @Query('source') source?: string,
   ) {
-    return this.customers.search(user.tenantId, q, Math.min(take, 200), skip);
+    return this.customers.search(user.tenantId, q, Math.min(take, 200), skip, source);
   }
 
   /** Nouvelles inscriptions boutique en ligne depuis `since` (ISO) : alerte sonore/visuelle cote caisse. */

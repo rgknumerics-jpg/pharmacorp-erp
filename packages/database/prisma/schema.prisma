@@ -496,6 +496,10 @@ model Customer {
   loyaltyPoints   Int       @default(0) @map("loyalty_points")
   /// particulier | entreprise | assure | personnel
   kind            String    @default("particulier")
+  /// pos (cree en pharmacie) | online (cree depuis la boutique en ligne). Separe les deux populations
+  /// (ARCHITECTURE.md -- Clients) : un client online n'est jamais eligible au credit, et reste suivi
+  /// depuis Commandes en ligne plutot que dans la liste Clients, qui n'affiche que les clients "pos" par defaut.
+  source          String    @default("pos")
   address         String?
   city            String?
   birthDate       DateTime? @map("birth_date") @db.Date
