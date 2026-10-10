@@ -23,4 +23,5 @@ tools/dist/keys/
 config.json
 licences-generees.csv
 *.key
+.netlify/
 

@@ -72,7 +72,7 @@ export function mergeSettings(cur: unknown, input: unknown): Settings {
     hiddenCategoryIds: 'hiddenCategoryIds' in s ? strs(s.hiddenCategoryIds, 40, 500) : b.hiddenCategoryIds, hiddenForms: 'hiddenForms' in s ? strs(s.hiddenForms, 60, 200) : b.hiddenForms,
     brandName: 'brandName' in s ? str(s.brandName, b.brandName, 60) : b.brandName,
     tagline: 'tagline' in s ? str(s.tagline, b.tagline, 140) : b.tagline,
-    logoUrl: 'logoUrl' in s ? str(s.logoUrl, b.logoUrl, 300) : b.logoUrl,
+    logoUrl: 'logoUrl' in s ? str(s.logoUrl, b.logoUrl, 500_000) : b.logoUrl,
     primaryColor: 'primaryColor' in s && /^#[0-9a-fA-F]{6}$/.test(String(s.primaryColor)) ? String(s.primaryColor) : ('primaryColor' in s && s.primaryColor === '' ? '' : b.primaryColor),
   }));
   const shifts = (v: unknown, b: CashShift[]): CashShift[] => {

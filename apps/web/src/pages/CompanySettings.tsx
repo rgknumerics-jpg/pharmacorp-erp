@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, can } from '../lib/api';
 import { ErrorBox, useLoad } from '../components/ui';
+import { shrink } from './CompanyBranding';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -29,9 +30,17 @@ function ListEditor({ title, items, onChange, placeholder }: { title: string; it
 export function SettingsSection() {
   const write = can('company.manage');
   const { data, error, setData } = useLoad(() => api<any>('/company/settings'), []);
-  const { data: cats } = useLoad(() => api<{ id: string; name: string }[]>('/categories'), []);
+  const { data: cats, setData: setCats, reload: reloadCats } = useLoad(() => api<{ id: string; name: string }[]>('/categories'), []);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [newCat, setNewCat] = useState('');
+  const [logoBusy, setLogoBusy] = useState(false);
+  async function addCategory() {
+    const name = newCat.trim();
+    if (!name) return;
+    setErr(null);
+    try { const c = await api<{ id: string; name: string }>('/categories', { method: 'POST', json: { name } }); setCats([...(cats ?? []), c]); setNewCat(''); reloadCats(); } catch (e) { setErr((e as Error).message); }
+  }
   useEffect(() => { if (msg) { const t = setTimeout(() => setMsg(null), 3000); return () => clearTimeout(t); } }, [msg]);
   if (!data) return <ErrorBox error={error} />;
   const set = (k: string, patch: Record<string, unknown>) => setData({ ...data, [k]: { ...data[k], ...patch } });
@@ -94,9 +103,15 @@ export function SettingsSection() {
             <label className="block text-xs font-bold text-ink-muted">Slogan
               <input className="mt-1 w-full" placeholder="Ex. Votre univers en harmonie, pour un Vous unique" value={data.online.tagline} onChange={(e) => set('online', { tagline: e.target.value })} />
             </label>
-            <label className="block text-xs font-bold text-ink-muted">Logo (chemin ou URL)
-              <input className="mt-1 w-full" placeholder="/brands/rive-gauche-logo.jpg" value={data.online.logoUrl} onChange={(e) => set('online', { logoUrl: e.target.value })} />
-            </label>
+            <div className="block text-xs font-bold text-ink-muted">Logo
+              <div className="mt-1 flex items-center gap-2">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white ring-1 ring-ink-line">{data.online.logoUrl ? <img src={data.online.logoUrl} alt="" className="h-full w-full object-contain" /> : <span className="text-[10px] text-ink-muted">Aucun</span>}</div>
+                <label className="btn-alt cursor-pointer !py-1.5 text-xs">{logoBusy ? 'Chargement…' : 'Choisir une image'}
+                  <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" disabled={logoBusy} onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; setLogoBusy(true); try { set('online', { logoUrl: await shrink(f) }); } catch (x) { setErr((x as Error).message); } finally { setLogoBusy(false); } }} />
+                </label>
+                {data.online.logoUrl && <button type="button" className="text-xs font-bold text-red-700" onClick={() => set('online', { logoUrl: '' })}>Retirer</button>}
+              </div>
+            </div>
             <label className="block text-xs font-bold text-ink-muted">Couleur principale
               <div className="mt-1 flex items-center gap-2">
                 <input type="color" className="h-9 w-12 cursor-pointer rounded border border-ink-line p-0" value={data.online.primaryColor || '#16a34a'} onChange={(e) => set('online', { primaryColor: e.target.value })} />
@@ -116,7 +131,8 @@ export function SettingsSection() {
         </div>
         <div className="rounded-xl bg-slate-50 p-3">
           <div className="mb-2 text-sm font-extrabold">Catégories visibles dans l’application client</div>
-          <div className="flex flex-wrap gap-2">{cats?.map((c) => { const on = !hiddenCat.has(c.id); return <label key={c.id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${on ? 'bg-brand text-white' : 'bg-white ring-1 ring-ink-line line-through'}`}><input type="checkbox" className="hidden" checked={on} onChange={() => set('online', { hiddenCategoryIds: on ? [...hiddenCat, c.id] : [...hiddenCat].filter((x) => x !== c.id) })} />{c.name}</label>; })}{cats && !cats.length && <span className="text-xs text-ink-muted">Aucune catégorie créée.</span>}</div>
+          <div className="mb-2 flex flex-wrap gap-2">{cats?.map((c) => { const on = !hiddenCat.has(c.id); return <label key={c.id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${on ? 'bg-brand text-white' : 'bg-white ring-1 ring-ink-line line-through'}`}><input type="checkbox" className="hidden" checked={on} onChange={() => set('online', { hiddenCategoryIds: on ? [...hiddenCat, c.id] : [...hiddenCat].filter((x) => x !== c.id) })} />{c.name}</label>; })}{cats && !cats.length && <span className="text-xs text-ink-muted">Aucune catégorie créée.</span>}</div>
+          {write && <div className="flex gap-2"><input className="flex-1" placeholder="Nouvelle catégorie (ex. Cosmétique, Parapharmacie…)" value={newCat} onChange={(e) => setNewCat(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCategory(); } }} /><button className="btn-alt" onClick={addCategory}>Ajouter</button></div>}
         </div>
       </section>
 

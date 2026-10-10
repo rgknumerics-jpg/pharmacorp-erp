@@ -14,7 +14,7 @@ const SAMPLE_SALE = {
 };
 
 /** Réduit une image à 400 px de large maximum (ticket thermique) et la renvoie en data URL. */
-async function shrink(file: File): Promise<string> {
+export async function shrink(file: File): Promise<string> {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ko(new Error('Image illisible')); i.src = url; });
