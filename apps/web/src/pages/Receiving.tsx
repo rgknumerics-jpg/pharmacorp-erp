@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, apiBlob, can, getSession } from '../lib/api';
-import { dateFr, dateTimeFr } from '../lib/format';
+import { dateFr, dateTimeFr, fcfa } from '../lib/format';
 import { Badge, ErrorBox, Field, PageTitle, useDebounced, useLoad } from '../components/ui';
+import { loadBranding } from '../lib/branding';
+import { printLabels } from '../lib/print';
 
 interface Supplier { id: string; name: string }
 interface PickProduct { id: string; name: string; sku: string }
@@ -90,14 +92,14 @@ export default function Receiving() {
     <>
       <PageTitle title="Réception et OCR" sub="Bons de livraison, factures et dates de péremption — rien n’entre en stock sans vérification humaine" />
       <div className="mb-3 flex flex-wrap gap-2">
-        {([['scan', '📷 Numériser'], ['manual', '⌨️ Saisie manuelle'], ['review', 'Documents à vérifier'], ['history', 'Historique']] as const).map(([k, l]) => (
+        {([['scan', '📷 Numériser'], ['manual', '⌨️ Saisie rapide'], ['review', 'Documents à vérifier'], ['history', 'Historique']] as const).map(([k, l]) => (
           <button key={k} className={tab === k ? 'btn' : 'btn-alt'} onClick={() => { setTab(k); setOpen(null); }}>{l}</button>
         ))}
       </div>
       {open ? <Review id={open} onClose={() => { setOpen(null); setTab('review'); }} /> : (
         <>
           {tab === 'scan' && <Scan onCreated={(id) => setOpen(id)} />}
-          {tab === 'manual' && <Manual />}
+          {tab === 'manual' && <QuickReceive />}
           {tab === 'review' && <ReviewList onOpen={setOpen} />}
           {tab === 'history' && <History />}
         </>
@@ -252,35 +254,206 @@ function ReviewList({ onOpen }: { onOpen: (id: string) => void }) {
   );
 }
 
-function Manual() {
+interface FullProduct { id: string; name: string; sku: string; barcode?: string | null; dci?: string | null; salePrice: number; purchasePrice?: number; vatRate: number; trackLots: boolean }
+interface QrLine { product: FullProduct; quantity: number; unitCost: number; salePrice: number; taxable: boolean; lotNumber: string; expiryDate: string }
+
+const Key = ({ k }: { k: string }) => <kbd className="rounded border border-ink-line bg-white px-1 text-[10px] font-bold text-ink-muted">{k}</kbd>;
+
+/**
+ * Réception clavier-first (feuille de route PharmaCorp — Achats) : fournisseur/N° BL/date puis une boucle
+ * recherche → Entrée → quantité → Entrée pour chaque ligne (coût déjà connu, pas ressaisi), un écran de
+ * contrôle prix/marge avec rapprochement du total du bon, puis impression des étiquettes en un geste.
+ */
+function QuickReceive() {
   const { data: suppliers, reload } = useLoad(() => api<Supplier[]>('/suppliers'));
+  const [step, setStep] = useState<'header' | 'lines' | 'control'>('header');
   const [supplierId, setSupplierId] = useState('');
   const [ref, setRef] = useState('');
-  const [lines, setLines] = useState<Line[]>([{ productId: '', productName: '', quantity: 1, unitCost: 0, lotNumber: '', expiryDate: '' }]);
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [lines, setLines] = useState<QrLine[]>([]);
+  const [blTotal, setBlTotal] = useState('');
+  const [ignoreGap, setIgnoreGap] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // --- étape produits : recherche clavier, puis quantité, puis (si suivi par lot) lot + péremption
+  const [q, setQ] = useState('');
+  const dq = useDebounced(q, 200);
+  const [results, setResults] = useState<FullProduct[]>([]);
+  const [sel, setSel] = useState(0);
+  const [draft, setDraft] = useState<FullProduct | null>(null);
+  const [dQty, setDQty] = useState('1');
+  const [dLot, setDLot] = useState('');
+  const [dExp, setDExp] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  const qtyRef = useRef<HTMLInputElement>(null);
+  const lotRef = useRef<HTMLInputElement>(null);
+  const supplierRef = useRef<HTMLSelectElement>(null);
+  const refRef = useRef<HTMLInputElement>(null);
+  const dateRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setSel(0);
+    if (dq.trim().length < 2) { setResults([]); return; }
+    api<FullProduct[]>(`/products?q=${encodeURIComponent(dq.trim())}&take=10`).then(setResults).catch(() => setResults([]));
+  }, [dq]);
+
+  function pick(p: FullProduct) {
+    setDraft(p); setDQty('1'); setDLot(''); setDExp(''); setQ(''); setResults([]);
+    setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0);
+  }
+  function commitLine() {
+    if (!draft) return;
+    const quantity = Math.max(1, Number(dQty) || 1);
+    if (draft.trackLots && !dLot.trim()) { lotRef.current?.focus(); return; }
+    setLines((ls) => [...ls, { product: draft, quantity, unitCost: draft.purchasePrice ?? 0, salePrice: draft.salePrice, taxable: draft.vatRate > 0, lotNumber: dLot.trim().toUpperCase(), expiryDate: dExp }]);
+    setDraft(null); setDQty('1'); setDLot(''); setDExp('');
+    setTimeout(() => searchRef.current?.focus(), 0);
+  }
+  function removeLine(i: number) { setLines((ls) => ls.filter((_, k) => k !== i)); }
+  const updLine = (i: number, patch: Partial<QrLine>) => setLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)));
+
+  const total = lines.reduce((s, l) => s + l.quantity * l.unitCost, 0);
+  const blNum = Number(blTotal.replace(/[^\d.-]/g, '')) || 0;
+  const gap = blTotal.trim() ? total - blNum : 0;
+  const reconciled = !blTotal.trim() || gap === 0 || ignoreGap;
 
   async function addSupplier() {
     const name = prompt('Nom du fournisseur'); if (!name) return;
     try { const s = await api<Supplier>('/suppliers', { method: 'POST', json: { name } }); reload(); setSupplierId(s.id); } catch (e) { setError((e as Error).message); }
   }
-  async function save() {
-    setError(null); setOk(null);
+
+  async function validate() {
+    if (!reconciled || !lines.length || busy) return;
+    setBusy(true); setError(null);
     try {
-      const r = await api<{ number: string }>('/goods-receipts', { method: 'POST', json: { supplierId: supplierId || undefined, supplierRef: ref || undefined, updateCosts: true, depotId: receiveDepot(), lines: toPayload(lines) } });
-      setOk(`Réception ${r.number} enregistrée.`); setLines([{ productId: '', productName: '', quantity: 1, unitCost: 0, lotNumber: '', expiryDate: '' }]); setRef('');
-    } catch (e) { setError((e as Error).message); }
+      const r = await api<{ number: string }>('/goods-receipts', {
+        method: 'POST',
+        json: { supplierId: supplierId || undefined, supplierRef: ref || undefined, updateCosts: true, depotId: receiveDepot(), lines: lines.map((l) => ({ productId: l.product.id, quantity: l.quantity, unitCost: l.unitCost, lotNumber: l.lotNumber || undefined, expiryDate: l.expiryDate || undefined })) },
+      });
+      // Prix de vente / taux de TVA ajustés au contrôle : mis à jour sur la fiche produit uniquement si changés.
+      await Promise.all(lines.filter((l) => l.salePrice !== l.product.salePrice || (l.taxable ? l.product.vatRate <= 0 : l.product.vatRate > 0)).map((l) =>
+        api(`/products/${l.product.id}`, { method: 'PUT', json: { salePrice: l.salePrice, vatRate: l.taxable ? Math.max(l.product.vatRate, 1) : 0 } }).catch(() => undefined),
+      ));
+      try { const b = await loadBranding(); printLabels(lines.map((l) => ({ name: l.product.name, dci: l.product.dci, price: l.salePrice, barcode: l.product.barcode || l.product.sku, expiry: l.expiryDate || undefined, qty: l.quantity, lot: l.lotNumber || undefined })), b); } catch { /* impression facultative */ }
+      setOk(`Réception ${r.number} enregistrée, étiquettes envoyées à l’impression.`);
+      setLines([]); setRef(''); setBlTotal(''); setIgnoreGap(false); setStep('header');
+    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
+
   return (
-    <div className="card space-y-3">
-      <div className="grid gap-3 md:grid-cols-3">
-        <DepotPicker /><Field label="Fournisseur"><div className="flex gap-1"><select className="w-full" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">— choisir —</option>{suppliers?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select><button className="btn-alt" onClick={addSupplier} title="Nouveau fournisseur">+</button></div></Field>
-        <Field label="N° bon de livraison / facture"><input className="w-full" value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-3 rounded-lg bg-slate-50 px-3 py-1.5 text-xs text-ink-muted">
+        <span><Key k="Entrée" /> valider / champ suivant</span><span><Key k="↑↓" /> choisir dans la liste</span><span><Key k="Échap" /> annuler la recherche</span>
       </div>
-      <LinesEditor lines={lines} setLines={setLines} />
-      <ErrorBox error={error} />
-      {ok && <div className="rounded-lg bg-brand-soft px-3 py-2 text-sm font-bold text-brand">{ok}</div>}
-      <button className="btn" disabled={!toPayload(lines).length} onClick={save}>Enregistrer la réception</button>
+
+      {step === 'header' && (
+        <div className="card space-y-3">
+          <h3 className="font-extrabold">1. Fournisseur et bon de livraison</h3>
+          <div className="grid gap-3 md:grid-cols-3">
+            <DepotPicker />
+            <Field label="Fournisseur">
+              <div className="flex gap-1">
+                <select ref={supplierRef} autoFocus className="w-full" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); refRef.current?.focus(); } }}>
+                  <option value="">— choisir —</option>{suppliers?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <button className="btn-alt" onClick={addSupplier} title="Nouveau fournisseur">+</button>
+              </div>
+            </Field>
+            <Field label="N° bon de livraison / facture"><input ref={refRef} className="w-full" value={ref} onChange={(e) => setRef(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); dateRef.current?.focus(); } }} /></Field>
+            <Field label="Date de réception"><input ref={dateRef} type="date" className="w-full" value={date} onChange={(e) => setDate(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setStep('lines'); setTimeout(() => searchRef.current?.focus(), 0); } }} /></Field>
+          </div>
+          <button className="btn" onClick={() => { setStep('lines'); setTimeout(() => searchRef.current?.focus(), 0); }}>Saisir les produits →</button>
+        </div>
+      )}
+
+      {step === 'lines' && (
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-extrabold">2. Produits reçus</h3>
+            <button className="btn-alt text-xs" onClick={() => setStep('header')}>← Fournisseur / bon</button>
+          </div>
+          <div className="relative">
+            <input ref={searchRef} className="w-full text-lg" placeholder="🔎 Rechercher un produit…" value={draft ? draft.name : q}
+              onChange={(e) => { if (!draft) setQ(e.target.value); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { e.preventDefault(); setQ(''); setResults([]); setDraft(null); }
+                else if (results.length && e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(results.length - 1, s + 1)); }
+                else if (results.length && e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(0, s - 1)); }
+                else if (e.key === 'Enter' && results[sel] && !draft) { e.preventDefault(); pick(results[sel]); }
+              }} />
+            {results.length > 0 && !draft && (
+              <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-ink-line bg-white shadow">
+                {results.map((p, i) => <button key={p.id} className={`block w-full px-3 py-2 text-left text-sm ${i === sel ? 'bg-brand text-white' : i % 2 ? 'bg-slate-50' : ''}`} onMouseEnter={() => setSel(i)} onClick={() => pick(p)}>{p.name} <span className="text-xs opacity-70">{p.sku}</span></button>)}
+              </div>
+            )}
+          </div>
+          {draft && (
+            <div className="flex flex-wrap items-end gap-3 rounded-lg bg-brand-soft p-3">
+              <Field label="Quantité"><input ref={qtyRef} type="number" min={1} className="w-24" value={dQty} onChange={(e) => setDQty(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (draft.trackLots) lotRef.current?.focus(); else commitLine(); } }} /></Field>
+              {draft.trackLots && <>
+                <Field label="N° de lot"><input ref={lotRef} className="w-32" value={dLot} onChange={(e) => setDLot(e.target.value.toUpperCase())} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('qr-exp')?.focus(); } }} /></Field>
+                <Field label="Péremption"><input id="qr-exp" type="date" className="w-36" value={dExp} onChange={(e) => setDExp(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitLine(); } }} /></Field>
+              </>}
+              <button className="btn !py-2" onClick={commitLine}>Ajouter (Entrée)</button>
+              <span className="text-xs text-ink-muted">Coût d’achat connu : {fcfa(draft.purchasePrice ?? 0)}/unité</span>
+            </div>
+          )}
+          {lines.length > 0 && (
+            <table className="w-full text-sm"><thead><tr><th className="text-left">Produit</th><th>Qté</th><th>Coût unit.</th><th>Lot</th><th /></tr></thead><tbody>
+              {lines.map((l, i) => (
+                <tr key={i}>
+                  <td className="py-1">{l.product.name}</td>
+                  <td className="py-1 text-center">{l.quantity}</td>
+                  <td className="py-1 text-center">{fcfa(l.unitCost)}</td>
+                  <td className="py-1 text-center text-xs text-ink-muted">{l.lotNumber || '—'}</td>
+                  <td className="py-1 text-right"><button className="text-xs font-bold text-red-700" onClick={() => removeLine(i)}>✕</button></td>
+                </tr>
+              ))}
+            </tbody></table>
+          )}
+          <button className="btn" disabled={!lines.length} onClick={() => setStep('control')}>Contrôle prix et marges →</button>
+        </div>
+      )}
+
+      {step === 'control' && (
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-extrabold">3. Contrôle et rapprochement</h3>
+            <button className="btn-alt text-xs" onClick={() => setStep('lines')}>← Produits</button>
+          </div>
+          <table className="w-full text-sm"><thead><tr><th className="text-left">Produit</th><th>Qté</th><th>Achat</th><th>Vente</th><th>Marge</th><th>Taxable</th></tr></thead><tbody>
+            {lines.map((l, i) => {
+              const margin = l.salePrice > 0 ? Math.round(((l.salePrice - l.unitCost) / l.salePrice) * 100) : 0;
+              return (
+                <tr key={i}>
+                  <td className="py-1">{l.product.name}</td>
+                  <td className="py-1 text-center">{l.quantity}</td>
+                  <td className="py-1 text-center"><input type="number" min={0} className="w-24" value={l.unitCost} onChange={(e) => updLine(i, { unitCost: Number(e.target.value) || 0 })} /></td>
+                  <td className="py-1 text-center"><input type="number" min={0} className="w-24" value={l.salePrice} onChange={(e) => updLine(i, { salePrice: Number(e.target.value) || 0 })} /></td>
+                  <td className="py-1 text-center"><Badge tone={margin < 10 ? 'bad' : margin < 25 ? 'warn' : 'ok'}>{margin} %</Badge></td>
+                  <td className="py-1 text-center"><input type="checkbox" checked={l.taxable} onChange={(e) => updLine(i, { taxable: e.target.checked })} /></td>
+                </tr>
+              );
+            })}
+          </tbody></table>
+          <div className="flex flex-wrap items-end gap-3 rounded-lg bg-slate-50 p-3">
+            <Field label="Total du bon de livraison (papier)"><input className="w-40" placeholder={fcfa(total)} value={blTotal} onChange={(e) => { setBlTotal(e.target.value); setIgnoreGap(false); }} /></Field>
+            <div className="text-sm"><b>Total saisi :</b> {fcfa(total)}</div>
+            {blTotal.trim() && gap !== 0 && (
+              <div className="flex items-center gap-2 text-sm font-bold text-red-700">
+                Écart : {fcfa(Math.abs(gap))} {gap > 0 ? '(saisi en trop)' : '(manque)'}
+                <label className="flex items-center gap-1 text-xs font-normal text-ink-muted"><input type="checkbox" checked={ignoreGap} onChange={(e) => setIgnoreGap(e.target.checked)} /> Ignorer l’écart</label>
+              </div>
+            )}
+            {blTotal.trim() && gap === 0 && <Badge tone="ok">Totaux alignés</Badge>}
+          </div>
+          <ErrorBox error={error} />
+          {ok && <div className="rounded-lg bg-brand-soft px-3 py-2 text-sm font-bold text-brand">{ok}</div>}
+          <button className="btn" disabled={!reconciled || busy} onClick={validate}>{busy ? 'Validation…' : 'Valider la réception et imprimer les étiquettes'}</button>
+        </div>
+      )}
     </div>
   );
 }
