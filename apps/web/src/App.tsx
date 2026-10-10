@@ -7,6 +7,7 @@ import {
   HardDrive, UsersRound, BookUser, Building2, Library as LibraryIcon, CalendarClock,
 } from 'lucide-react';
 import { can, getSession, login, logout, Session, setOnExpire, api, switchOperator, restoreBaseSession } from './lib/api';
+import { alertStaff } from './lib/alert';
 import Accounting from './pages/Accounting';
 import Advisor from './pages/Advisor';
 import Audit from './pages/Audit';
@@ -111,6 +112,26 @@ export default function App() {
   }, [session]);
   const pollChat = useCallback(() => { api<typeof chatInfo>('/chat/unread').then(setChatInfo).catch(() => undefined); }, []);
   useEffect(() => { if (!session) return; pollChat(); const id = setInterval(pollChat, 12000); return () => clearInterval(id); }, [session, pollChat]);
+
+  // Nouvelle inscription sur la boutique en ligne : alerte sonore + bannière clignotante côté caisse/équipe.
+  const [signupAlert, setSignupAlert] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!session || !can('customers.read')) return;
+    let since = (() => { try { return sessionStorage.getItem('erp.lastSignupCheck') ?? new Date().toISOString(); } catch { return new Date().toISOString(); } })();
+    const poll = () => {
+      api<{ name: string; createdAt: string }[]>(`/customers/online-signups?since=${encodeURIComponent(since)}`).then((rows) => {
+        if (rows.length) {
+          alertStaff('Nouveau client inscrit', rows.map((r) => r.name).join(', '));
+          setSignupAlert(rows.map((r) => r.name));
+          setTimeout(() => setSignupAlert(null), 20000);
+        }
+        since = new Date().toISOString();
+        try { sessionStorage.setItem('erp.lastSignupCheck', since); } catch { /* ignore */ }
+      }).catch(() => undefined);
+    };
+    const id = setInterval(poll, 15000);
+    return () => clearInterval(id);
+  }, [session]);
   useEffect(() => { const h = () => setPage(location.hash.slice(1).split('?')[0] || first); window.addEventListener('hashchange', h); return () => window.removeEventListener('hashchange', h); }, [first]);
   const go = (p: string) => { location.hash = p; setPage(p); };
 
@@ -167,6 +188,13 @@ export default function App() {
         </div>
       </nav>
       <div ref={mainRef} className="min-w-0 md:h-screen md:overflow-y-auto">
+      {signupAlert && (
+        <div className="no-print flex animate-pulse items-center gap-3 bg-amber-500 px-4 py-2 text-sm font-extrabold text-white">
+          <span>🆕 Nouveau{signupAlert.length > 1 ? 'x' : ''} client{signupAlert.length > 1 ? 's' : ''} inscrit{signupAlert.length > 1 ? 's' : ''} sur la boutique : {signupAlert.join(', ')}</span>
+          <button className="ml-auto whitespace-nowrap rounded-full bg-white/20 px-3 py-0.5" onClick={() => go('customers')}>Voir</button>
+          <button className="rounded-full bg-white/20 px-3 py-0.5" onClick={() => setSignupAlert(null)}>✕</button>
+        </div>
+      )}
       {chatInfo.alert && dismissed !== chatInfo.alert.id && (
         <div className={`no-print flex items-start gap-3 px-4 py-2 text-sm font-bold text-white ${chatInfo.alert.kind === 'alerte' ? 'bg-red-600' : 'bg-sky-600'}`}>
           <span>{chatInfo.alert.kind === 'alerte' ? '🚨 Alerte' : 'ℹ️ Information'} : {chatInfo.alert.body.slice(0, 220)}</span>

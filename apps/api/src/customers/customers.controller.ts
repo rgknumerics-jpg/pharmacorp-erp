@@ -23,6 +23,14 @@ export class CustomersController {
     return this.customers.search(user.tenantId, q, Math.min(take, 200), skip);
   }
 
+  /** Nouvelles inscriptions boutique en ligne depuis `since` (ISO) : alerte sonore/visuelle cote caisse. */
+  @Get('online-signups')
+  @RequirePermissions('customers.read')
+  onlineSignups(@CurrentUser() user: AuthenticatedUser, @Query('since') since?: string) {
+    const d = since && !Number.isNaN(Date.parse(since)) ? new Date(since) : new Date(Date.now() - 3_600_000);
+    return this.customers.recentOnlineSignups(user.tenantId, d);
+  }
+
   @Get(':id')
   @RequirePermissions('customers.read')
   one(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
@@ -45,5 +53,11 @@ export class CustomersController {
   @RequirePermissions('customers.collect')
   repay(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CreditRepaymentDto) {
     return this.customers.repay(user, id, dto);
+  }
+
+  @Post(':id/online-account/reset-password')
+  @RequirePermissions('customers.write')
+  resetOnlineAccountPassword(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.customers.resetOnlineAccountPassword(user, id);
   }
 }

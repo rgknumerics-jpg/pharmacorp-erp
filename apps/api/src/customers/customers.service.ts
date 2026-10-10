@@ -1,3 +1,4 @@
+import * as bcrypt from 'bcrypt';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { normalizePhone } from '../common/phone.util';
@@ -6,6 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { emit } from '../accounting/outbox';
 import { CreateCustomerDto, CreditRepaymentDto, UpdateCustomerDto } from './dto/customer.dto';
 
+/** Genere un mot de passe temporaire lisible (sans caracteres ambigus 0/O/1/I) a communiquer au client. */
+function tempPassword(): string {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
 @Injectable()
 export class CustomersService {
   constructor(
@@ -13,11 +20,11 @@ export class CustomersService {
     private readonly auditLog: AuditLogService,
   ) {}
 
-  search(tenantId: string, q: string | undefined, take: number, skip: number) {
+  async search(tenantId: string, q: string | undefined, take: number, skip: number) {
     const term = q?.trim();
     const digits = term?.replace(/\D/g, '');
-    return this.prisma.forTenant(tenantId, (tx) =>
-      tx.customer.findMany({
+    return this.prisma.forTenant(tenantId, async (tx) => {
+      const rows = await tx.customer.findMany({
         where: {
           isActive: true,
           ...(term
@@ -27,8 +34,36 @@ export class CustomersService {
         orderBy: { name: 'asc' },
         take,
         skip,
-      }),
-    );
+      });
+      // Compte boutique en ligne (CustomerAccount n'a pas de relation Prisma vers Customer, jointure manuelle).
+      const accounts = await tx.customerAccount.findMany({ where: { customerId: { in: rows.map((r) => r.id) } }, select: { customerId: true } });
+      const withAccount = new Set(accounts.map((a) => a.customerId));
+      return rows.map((r) => ({ ...r, hasOnlineAccount: withAccount.has(r.id) }));
+    });
+  }
+
+  /** Nouvelles inscriptions boutique en ligne depuis `since` (notif sonore/visuelle cote caisse). */
+  async recentOnlineSignups(tenantId: string, since: Date) {
+    return this.prisma.forTenant(tenantId, async (tx) => {
+      const accounts = await tx.customerAccount.findMany({ where: { createdAt: { gt: since } }, orderBy: { createdAt: 'desc' }, take: 20 });
+      if (!accounts.length) return [];
+      const customers = await tx.customer.findMany({ where: { id: { in: accounts.map((a) => a.customerId) } }, select: { id: true, name: true } });
+      const byId = new Map(customers.map((c) => [c.id, c.name]));
+      return accounts.map((a) => ({ id: a.id, customerId: a.customerId, name: byId.get(a.customerId) ?? '—', phone: a.phone, createdAt: a.createdAt }));
+    });
+  }
+
+  /** Reinitialise le mot de passe du compte boutique en ligne d'un client (le titulaire communique le nouveau mot de passe). */
+  async resetOnlineAccountPassword(user: AuthenticatedUser, customerId: string) {
+    const password = tempPassword();
+    const passwordHash = await bcrypt.hash(password, 10);
+    await this.prisma.forTenant(user.tenantId, async (tx) => {
+      const acc = await tx.customerAccount.findFirst({ where: { customerId } });
+      if (!acc) throw new NotFoundException('Ce client n’a pas de compte sur la boutique en ligne.');
+      await tx.customerAccount.update({ where: { id: acc.id }, data: { passwordHash } });
+    });
+    await this.auditLog.record({ tenantId: user.tenantId, userId: user.userId, action: 'customers.online_password_reset', entityType: 'customer', entityId: customerId });
+    return { password };
   }
 
   async findOne(tenantId: string, id: string) {

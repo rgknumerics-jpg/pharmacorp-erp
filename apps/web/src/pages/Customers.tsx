@@ -4,7 +4,7 @@ import { fcfa } from '../lib/format';
 import { Badge, ErrorBox, Field, Modal, PageTitle, useDebounced, useLoad } from '../components/ui';
 import { Insurers, Receivables } from './Credit';
 
-interface Customer { id: string; name: string; phone?: string | null; email?: string | null; creditLimit: number; creditBalance: number; notes?: string | null }
+interface Customer { id: string; name: string; phone?: string | null; email?: string | null; creditLimit: number; creditBalance: number; notes?: string | null; hasOnlineAccount?: boolean }
 
 export default function Customers() {
   const [tab, setTab] = useState<'list' | 'credit' | 'insurers'>('list');
@@ -32,10 +32,11 @@ function CustomerList() {
       <div className="card mb-3"><input className="w-full" placeholder="🔎 Nom ou téléphone…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       <ErrorBox error={error} />
       <div className="card overflow-auto"><table className="w-full">
-        <thead><tr><th>Client</th><th>Téléphone</th><th>Plafond</th><th>Doit</th><th /></tr></thead>
+        <thead><tr><th>Client</th><th>Téléphone</th><th>Compte</th><th>Plafond</th><th>Doit</th><th /></tr></thead>
         <tbody>{data?.map((c) => (
           <tr key={c.id}><td><b>{c.name}</b><div className="text-xs text-ink-muted">{c.email}</div></td>
             <td>{c.phone ? <a className="text-brand underline" href={`https://wa.me/${c.phone}`} target="_blank" rel="noreferrer">{c.phone}</a> : '—'}</td>
+            <td>{c.hasOnlineAccount ? <Badge tone="info">🌐 Compte web</Badge> : <span className="text-xs text-ink-muted">—</span>}</td>
             <td>{fcfa(c.creditLimit)}</td><td>{c.creditBalance > 0 ? <Badge tone="warn">{fcfa(c.creditBalance)}</Badge> : '—'}</td>
             <td className="space-x-1">{write && <button className="btn-alt" onClick={() => setEdit(c)}>Modifier</button>}{write && c.creditBalance > 0 && <button className="btn" onClick={() => setRepay(c)}>Encaisser</button>}</td></tr>
         ))}</tbody>
@@ -56,7 +57,14 @@ function Form({ initial, onClose, onSaved }: { initial: Partial<Customer> & Reco
   });
   const { data: insurers } = useLoad(() => api<{ id: string; name: string; coverageRate: number }[]>('/insurers'));
   const [error, setError] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
+  async function resetOnlinePassword() {
+    if (!initial.id || resetting) return;
+    setResetting(true); setError(null);
+    try { const r = await api<{ password: string }>(`/customers/${initial.id}/online-account/reset-password`, { method: 'POST' }); setNewPassword(r.password); } catch (e) { setError((e as Error).message); } finally { setResetting(false); }
+  }
   async function save(e: FormEvent) {
     e.preventDefault();
     try {
@@ -92,6 +100,16 @@ function Form({ initial, onClose, onSaved }: { initial: Partial<Customer> & Reco
           <Field label="Délai de paiement (jours)"><input type="number" min={0} max={365} className="w-full" value={f.paymentTermDays} onChange={(e) => set('paymentTermDays', Number(e.target.value) || 0)} /></Field>
         </section>
         <Field label="Notes"><input className="w-full" value={f.notes} onChange={(e) => set('notes', e.target.value)} /></Field>
+        {initial.id && initial.hasOnlineAccount && (
+          <section className="space-y-2 rounded-xl border-l-4 border-sky-500 bg-sky-50/60 p-3">
+            <div className="font-extrabold">🌐 Compte boutique en ligne</div>
+            {newPassword ? (
+              <p className="text-sm">Nouveau mot de passe : <b className="rounded bg-white px-2 py-1 font-mono tracking-wider ring-1 ring-sky-300">{newPassword}</b> — à communiquer vous-même au client (il ne sera plus affiché après fermeture).</p>
+            ) : (
+              <button type="button" className="btn-alt" disabled={resetting} onClick={resetOnlinePassword}>{resetting ? 'Réinitialisation…' : 'Réinitialiser le mot de passe'}</button>
+            )}
+          </section>
+        )}
         <ErrorBox error={error} /><button className="btn !px-6">💾 Enregistrer</button>
       </form>
     </Modal>
