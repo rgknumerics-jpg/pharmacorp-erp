@@ -28,6 +28,7 @@ import { QueueModule } from './queue/queue.module';
 import { HealthModule } from './health/health.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { StockoutsModule } from './stockouts/stockouts.module';
+import { ProductHoldsModule } from './product-holds/product-holds.module';
 import { StockModule } from './stock/stock.module';
 import { CustomersModule } from './customers/customers.module';
 import { PurchasesModule } from './purchases/purchases.module';
@@ -80,6 +81,7 @@ import { CashdeskModule } from './cashdesk/cashdesk.module';
     HealthModule,
     CatalogModule,
     StockoutsModule,
+    ProductHoldsModule,
     StockModule,
     CustomersModule,
     PurchasesModule,

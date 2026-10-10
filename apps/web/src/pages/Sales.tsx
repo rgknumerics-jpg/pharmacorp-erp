@@ -23,17 +23,61 @@ function csv(cols: Col[], rows: Record<string, any>[]) {
 function download(name: string, content: string) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' })); a.download = name; a.click(); }
 
 export default function Sales() {
-  const [tab, setTab] = useState<'tickets' | 'stats' | 'closings'>('tickets');
+  const [tab, setTab] = useState<'tickets' | 'stats' | 'holds' | 'closings'>('tickets');
   return (
     <>
       <PageTitle title="Ventes" sub="Tickets (V vente · A assurance · B bon de pharmacie), filtres et statistiques" />
       <div className="mb-3 flex gap-2">
         <button className={tab === 'tickets' ? 'btn' : 'btn-alt'} onClick={() => setTab('tickets')}>🧾 Tickets de vente</button>
         <button className={tab === 'stats' ? 'btn' : 'btn-alt'} onClick={() => setTab('stats')}>📊 Statistiques</button>
+        <button className={tab === 'holds' ? 'btn' : 'btn-alt'} onClick={() => setTab('holds')}>📋 Avoirs</button>
         {can('reports.read') && <button className={tab === 'closings' ? 'btn' : 'btn-alt'} onClick={() => setTab('closings')}>🌙 Clôtures de caisse</button>}
       </div>
-      {tab === 'tickets' ? <Tickets /> : tab === 'stats' ? <StatsHub /> : <CashClosings />}
+      {tab === 'tickets' ? <Tickets /> : tab === 'stats' ? <StatsHub /> : tab === 'holds' ? <Holds /> : <CashClosings />}
     </>
+  );
+}
+
+interface HoldRow { id: string; number: string; customerName: string; customerPhone?: string | null; productName: string; quantity: number; unitPrice: number; status: string; dueAt: string; createdAt: string }
+const HOLD_STATUS: Record<string, ['ok' | 'warn' | 'bad' | 'muted', string]> = { open: ['warn', 'en attente'], fulfilled: ['ok', 'soldé'], cancelled: ['muted', 'annulé'] };
+
+/** Avoirs clients : produits indisponibles réservés chez un grossiste, en attente de retrait. */
+function Holds() {
+  const [status, setStatus] = useState('open');
+  const { data, error, reload } = useLoad(() => api<HoldRow[]>(`/product-holds${status ? `?status=${status}` : ''}`), [status]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const write = can('sales.hold');
+  async function act(id: string, action: 'fulfill' | 'cancel') {
+    setBusyId(id);
+    try { await api(`/product-holds/${id}/${action}`, { method: 'POST' }); reload(); } catch { /* affiché via ErrorBox au prochain chargement */ } finally { setBusyId(null); }
+  }
+  const now = Date.now();
+  return (
+    <div className="card">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-extrabold">Avoirs clients</h3>
+        <div className="flex gap-2">{(['open', 'fulfilled', 'cancelled', ''] as const).map((s) => <button key={s || 'all'} className={status === s ? 'btn !py-1' : 'btn-alt !py-1'} onClick={() => setStatus(s)}>{s === 'open' ? 'En attente' : s === 'fulfilled' ? 'Soldés' : s === 'cancelled' ? 'Annulés' : 'Tous'}</button>)}</div>
+      </div>
+      <ErrorBox error={error} />
+      <table className="w-full text-sm"><thead><tr><th className="text-left">N°</th><th className="text-left">Client</th><th className="text-left">Produit</th><th>Qté</th><th>Statut</th><th>À retirer avant</th>{write && <th /> }</tr></thead><tbody>
+        {data?.map((h) => {
+          const late = h.status === 'open' && new Date(h.dueAt).getTime() < now;
+          const [tone, label] = HOLD_STATUS[h.status] ?? ['muted', h.status];
+          return (
+            <tr key={h.id}>
+              <td className="py-1">{h.number}</td>
+              <td className="py-1">{h.customerName}{h.customerPhone ? ` · ${h.customerPhone}` : ''}</td>
+              <td className="py-1">{h.productName} <span className="text-xs text-ink-muted">×{h.quantity}</span></td>
+              <td className="py-1 text-center">{h.quantity}</td>
+              <td className="py-1 text-center"><Badge tone={late ? 'bad' : tone}>{late ? 'en retard' : label}</Badge></td>
+              <td className="py-1 text-center text-xs">{dateFr(h.dueAt)}</td>
+              {write && <td className="py-1 text-right">{h.status === 'open' && <><button className="btn-alt !py-1 text-xs" disabled={busyId === h.id} onClick={() => act(h.id, 'fulfill')}>Soldé (retiré)</button> <button className="ml-1 text-xs font-bold text-red-700" disabled={busyId === h.id} onClick={() => act(h.id, 'cancel')}>Annuler</button></>}</td>}
+            </tr>
+          );
+        })}
+        {data && !data.length && <tr><td colSpan={7} className="py-3 text-center text-xs text-ink-muted">Aucun avoir.</td></tr>}
+      </tbody></table>
+    </div>
   );
 }
 

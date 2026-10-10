@@ -63,6 +63,7 @@ export const PERMISSIONS = [
   { code: 'company.view', description: 'Consulter la structure (profil, documents, parametres des tickets)' },
   { code: 'customers.collect', description: 'Encaisser les reglements des clients (credit, bons de pharmacie)' },
   { code: 'sales.credit', description: 'Vendre a credit / delivrer un bon de pharmacie' },
+  { code: 'sales.hold', description: 'Valider un avoir (produit indisponible a obtenir chez un grossiste)' },
   { code: 'sales.ticket', description: 'Vendeur : saisir la vente (ticket) et l envoyer a la caisse' },
   { code: 'online.manage', description: 'Choisir les produits visibles sur le site et l application client' },
 ] as const;
@@ -78,6 +79,7 @@ export const PERMISSION_META: Record<string, { group: string; label: string }> =
   'online.manage': { group: 'Produits et stock', label: 'Boutique en ligne : choisir les produits visibles' },
   'sales.discount': { group: 'Caisse et ventes', label: 'Accorder une remise à la caisse' },
   'sales.credit': { group: 'Caisse et ventes', label: 'Vendre à crédit / bon de pharmacie' },
+  'sales.hold': { group: 'Caisse et ventes', label: 'Valider un avoir (produit à obtenir chez un grossiste)' },
   'sales.void': { group: 'Caisse et ventes', label: 'Annuler une vente' },
   'sales.read': { group: 'Caisse et ventes', label: 'Consulter les ventes' },
   'products.read': { group: 'Produits et stock', label: 'Voir les produits' },
@@ -134,10 +136,10 @@ export const DEFAULT_ROLES: Record<string, PermissionCode[]> = {
     'products.read', 'products.write', 'stock.read', 'stock.write', 'stock.validate_lot',
     'customers.read', 'customers.write', 'purchases.read', 'purchases.write',
     'sales.read', 'sales.create', 'sales.discount', 'reports.read', 'ocr.use', 'ocr.validate', 'tax.read', 'advisor.read', 'analytics.read', 'training.use', 'training.manage', 'audit.read', 'inventory.manage', 'promotions.manage',
-    'plants.read', 'finance.read', 'directory.read', 'library.read', 'company.view', 'customers.collect', 'sales.credit', 'sales.ticket', 'online.manage',
+    'plants.read', 'finance.read', 'directory.read', 'library.read', 'company.view', 'customers.collect', 'sales.credit', 'sales.hold', 'sales.ticket', 'online.manage',
   ],
   seller: ['products.read', 'stock.read', 'customers.read', 'customers.write', 'sales.read', 'sales.ticket', 'plants.read', 'training.use', 'library.read'],
-  cashier: ['products.read', 'stock.read', 'customers.read', 'customers.write', 'sales.read', 'sales.create', 'training.use', 'plants.read', 'sales.credit', 'customers.collect', 'library.read'],
+  cashier: ['products.read', 'stock.read', 'customers.read', 'customers.write', 'sales.read', 'sales.create', 'training.use', 'plants.read', 'sales.credit', 'sales.hold', 'customers.collect', 'library.read'],
   accountant: ['products.read', 'cost.read', 'purchases.read', 'sales.read', 'reports.read', 'audit.read', 'accounting.read', 'accounting.write', 'sfec.read', 'sfec.manage', 'tax.read', 'tax.manage', 'payroll.read', 'payroll.write', 'advisor.read', 'analytics.read', 'migration.run', 'hr.manage', 'finance.read', 'library.read', 'company.view'],
   employee: ['training.use', 'library.read'],
 };

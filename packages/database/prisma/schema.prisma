@@ -91,6 +91,7 @@ model Tenant {
 
   depots Depot[]
   stockoutLogs StockoutLog[]
+  productHolds ProductHold[]
 
   @@map("tenants")
 }
@@ -112,6 +113,8 @@ model User {
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
   stockoutLogs  StockoutLog[]
+  productHoldsCreated   ProductHold[] @relation("ProductHoldCreatedBy")
+  productHoldsFulfilled ProductHold[] @relation("ProductHoldFulfilledBy")
 
   @@map("users")
 }
@@ -347,6 +350,7 @@ model Product {
   poItems   PurchaseOrderItem[]
   saleItems SaleItem[]
   stockoutLogs StockoutLog[]
+  productHolds ProductHold[]
 
   @@unique([tenantId, sku])
   @@index([tenantId, name])
@@ -372,6 +376,39 @@ model StockoutLog {
   @@index([tenantId, createdAt])
   @@index([tenantId, productId])
   @@map("stockout_logs")
+}
+
+/// Avoir client (ARCHITECTURE.md -- Ventes) : produit indisponible en stock mais trouvable chez un grossiste.
+/// Reservation tracee et imprimable (2 exemplaires) -- ne touche ni le stock ni la caisse ; la vente/encaissement
+/// reel se fait normalement au retrait, via le poste de vente habituel.
+model ProductHold {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  number        String
+  customerId    String?  @map("customer_id") @db.Uuid
+  customerName  String   @map("customer_name")
+  customerPhone String?  @map("customer_phone")
+  productId     String?  @map("product_id") @db.Uuid
+  productName   String   @map("product_name")
+  quantity      Int
+  unitPrice     Int      @map("unit_price")
+  /// open | fulfilled | cancelled
+  status        String   @default("open")
+  dueAt         DateTime @map("due_at")
+  createdById   String?  @map("created_by_id") @db.Uuid
+  fulfilledById String?  @map("fulfilled_by_id") @db.Uuid
+  fulfilledAt   DateTime? @map("fulfilled_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  product     Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  createdBy   User?     @relation("ProductHoldCreatedBy", fields: [createdById], references: [id])
+  fulfilledBy User?     @relation("ProductHoldFulfilledBy", fields: [fulfilledById], references: [id])
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status, dueAt])
+  @@map("product_holds")
 }
 
 model Supplier {
@@ -436,6 +473,7 @@ model Customer {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   sales  Sale[]
+  productHolds ProductHold[]
 
   @@index([tenantId, name])
   @@index([tenantId, phone])

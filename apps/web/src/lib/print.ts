@@ -110,6 +110,24 @@ export function printVoucher(sale: SaleLike, b: BrandingData, cashier?: string, 
   printHtml(html, `.p{page-break-after:always;padding:12mm;font-size:12px;position:relative}.p:last-child{page-break-after:auto}.tag{position:absolute;top:6mm;right:10mm;border:1px solid #000;padding:1mm 3mm;font-weight:800;font-size:10px}h2{text-align:center;margin:6mm 0 3mm;font-size:16px;border-top:2px solid #000;border-bottom:2px solid #000;padding:2mm 0}.meta{display:grid;grid-template-columns:1fr 1fr;gap:1mm 6mm;margin-bottom:4mm}table{width:100%;border-collapse:collapse}th,td{border:1px solid #444;padding:1.5mm 2mm}.legal{margin:5mm 0;font-size:11px}.sig{display:flex;justify-content:space-between;gap:10mm;margin-top:6mm}.sig>div{flex:1;text-align:center;font-size:11px}.box{height:28mm;border:1px solid #000;margin-bottom:1.5mm}`, '@page{size:A5 portrait;margin:0}');
 }
 
+export interface ProductHoldLike { number: string; createdAt: string; customerName: string; customerPhone?: string | null; productName: string; quantity: number; unitPrice: number; dueAt: string }
+
+/** Avoir client (produit indisponible, trouvé chez un grossiste) : 2 exemplaires — pharmacie et client. */
+export function printProductHold(h: ProductHoldLike, b: BrandingData, seller?: string): void {
+  const names = ['EXEMPLAIRE PHARMACIE (à conserver)', 'EXEMPLAIRE CLIENT'];
+  const total = h.unitPrice * h.quantity;
+  const one = (k: number) => `<section class="p">
+    <div class="tag">${names[k]}</div>${head(b, true, false)}
+    <h2>AVOIR N° ${esc(h.number)}</h2>
+    <div class="meta"><div>Date : <b>${dt(h.createdAt)}</b></div><div>Client : <b>${esc(h.customerName)}</b>${h.customerPhone ? ` · ${esc(h.customerPhone)}` : ''}</div>${seller ? `<div>Délivré par : ${esc(seller)}</div>` : ''}<div>À retirer avant le : <b>${dt(h.dueAt)}</b></div></div>
+    <table><thead><tr><th style="text-align:left">Produit</th><th>Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Montant</th></tr></thead><tbody><tr><td>${esc(h.productName)}</td><td style="text-align:center">${h.quantity}</td><td style="text-align:right">${Math.round(h.unitPrice).toLocaleString('fr-FR')}</td><td style="text-align:right">${Math.round(total).toLocaleString('fr-FR')}</td></tr></tbody>
+    <tfoot><tr><td colspan="3" style="text-align:right"><b>TOTAL (prix bloqué)</b></td><td style="text-align:right"><b>${fcfa(total)}</b></td></tr></tfoot></table>
+    <p class="legal">Ce produit, actuellement indisponible, a été identifié chez un grossiste. Il sera remis au client contre présentation de cet avoir et d'une pièce d'identité, avant la date indiquée ci-dessus.</p>
+    <div class="sig"><div><div class="box"></div>Signature du client</div><div><div class="box"></div>Cachet et signature de la pharmacie</div></div></section>`;
+  const html = Array.from({ length: 2 }, (_, k) => one(k)).join('');
+  printHtml(html, `.p{page-break-after:always;padding:12mm;font-size:12px;position:relative}.p:last-child{page-break-after:auto}.tag{position:absolute;top:6mm;right:10mm;border:1px solid #000;padding:1mm 3mm;font-weight:800;font-size:10px}h2{text-align:center;margin:6mm 0 3mm;font-size:16px;border-top:2px solid #000;border-bottom:2px solid #000;padding:2mm 0}.meta{display:grid;grid-template-columns:1fr 1fr;gap:1mm 6mm;margin-bottom:4mm}table{width:100%;border-collapse:collapse}th,td{border:1px solid #444;padding:1.5mm 2mm}.legal{margin:5mm 0;font-size:11px}.sig{display:flex;justify-content:space-between;gap:10mm;margin-top:6mm}.sig>div{flex:1;text-align:center;font-size:11px}.box{height:28mm;border:1px solid #000;margin-bottom:1.5mm}`, '@page{size:A5 portrait;margin:0}');
+}
+
 export interface LabelItem { name: string; dci?: string | null; price: number; barcode?: string | null; expiry?: string | null; qty: number; supplier?: string | null; lot?: string | null }
 
 /** Une étiquette en HTML : chaque élément est placé à la position réglée dans « Ma structure » (mm depuis le coin haut-gauche). */

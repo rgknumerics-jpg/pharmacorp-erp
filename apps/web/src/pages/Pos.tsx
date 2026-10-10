@@ -5,7 +5,7 @@ import { Badge, ErrorBox, Modal, PageTitle, useDebounced } from '../components/u
 import { CashSession, CloseCash, ExpenseForm, OpenCash, ShiftReminder, useShift } from '../components/CashDesk';
 import { Advice, BasketAdvice, OfferGate } from '../components/PlantAdvice';
 import { BrandingData, loadBranding } from '../lib/branding';
-import { printReceipt, printVoucher } from '../lib/print';
+import { printReceipt, printProductHold, printVoucher } from '../lib/print';
 import { byCodeLocal, catalogDate, enqueue, flush, isNetworkError, queue, refreshCatalog, searchLocal } from '../lib/offline';
 
 interface Product { stock?: number; detail?: boolean; unitsPerBox?: number | null; id: string; sku: string; barcode?: string | null; name: string; salePrice: number; priceFree: boolean; vatRate: number; prescriptionRequired: boolean; trackLots: boolean }
@@ -112,6 +112,47 @@ function PinGate({ mode, onCancel }: { mode: WorkMode; onCancel?: () => void }) 
 const out = (p: { stock?: number; detail?: boolean }) => p.stock !== undefined && p.stock <= 0 && !p.detail;
 const lowDetail = (p: { stock?: number; detail?: boolean }) => !!p.detail && p.stock !== undefined && p.stock <= 0;
 
+interface HoldResult { number: string; createdAt: string; customerName: string; customerPhone?: string | null; productName: string; quantity: number; unitPrice: number; dueAt: string }
+
+/** Avoir client : produit en rupture mais trouvable chez un grossiste. La commande continue normalement ;
+ * ce document (imprimé en 2 exemplaires) trace la réservation, sans toucher le stock ni la caisse. */
+function HoldModal({ product, onClose }: { product: Product; onClose: () => void }) {
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<HoldResult | null>(null);
+  async function confirm() {
+    if (!customerName.trim() || quantity < 1 || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const h = await api<HoldResult>('/product-holds', { method: 'POST', json: { productId: product.id, customerName: customerName.trim(), customerPhone: customerPhone.trim() || undefined, quantity } });
+      const b = await loadBranding(true);
+      printProductHold(h, b);
+      setDone(h);
+    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  }
+  if (done) return (
+    <Modal title="Avoir délivré" onClose={onClose}>
+      <p className="text-sm">Avoir <b>{done.number}</b> imprimé en 2 exemplaires (pharmacie + client). À retirer avant le <b>{new Date(done.dueAt).toLocaleDateString('fr-FR')}</b>.</p>
+      <button className="btn mt-3 w-full" onClick={onClose}>Fermer</button>
+    </Modal>
+  );
+  return (
+    <Modal title={`Avoir — ${product.name}`} onClose={onClose}>
+      <p className="mb-3 text-sm text-ink-muted">Produit indisponible ici mais trouvable chez un grossiste. Après validation, un document imprimable en 2 exemplaires sera émis ; le produit sera vendu normalement au retrait.</p>
+      <div className="space-y-2">
+        <label className="block text-xs font-bold text-ink-muted">Nom du client<input className="mt-1 w-full" value={customerName} onChange={(e) => setCustomerName(e.target.value)} autoFocus /></label>
+        <label className="block text-xs font-bold text-ink-muted">Téléphone (optionnel)<input className="mt-1 w-full" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} /></label>
+        <label className="block text-xs font-bold text-ink-muted">Quantité<input type="number" min={1} className="mt-1 w-24" value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))} /></label>
+      </div>
+      <ErrorBox error={error} />
+      <button className="btn mt-3 w-full" disabled={!customerName.trim() || busy} onClick={confirm}>{busy ? 'Validation…' : 'Valider l’avoir et imprimer'}</button>
+    </Modal>
+  );
+}
+
 function PosCore({ workMode, onSwitch, onDirect }: { workMode: WorkMode; onSwitch?: () => void; onDirect?: () => void }) {
   const isSeller = workMode === 'seller', isCashier = workMode === 'cashier';
   const [ticketId, setTicketId] = useState<string | null>(null);
@@ -152,6 +193,7 @@ function PosCore({ workMode, onSwitch, onDirect }: { workMode: WorkMode; onSwitc
   useEffect(() => { loadCash(); }, [loadCash, done]);
   const shift = useShift();
   const [equiv, setEquiv] = useState<{ for: Product; alt: Equivalent } | null>(null);
+  const [holdFor, setHoldFor] = useState<Product | null>(null);
   const search = useRef<HTMLInputElement>(null);
   const cust = useRef<HTMLInputElement>(null);
   const cashIn = useRef<HTMLInputElement>(null);
@@ -348,10 +390,13 @@ function PosCore({ workMode, onSwitch, onDirect }: { workMode: WorkMode; onSwitc
             {results.length > 0 && (
               <div className="mt-2 overflow-hidden rounded-lg border border-ink-line">
                 {results.map((p, i) => (
-                  <button key={p.id} onMouseEnter={() => setSel(i)} onClick={() => add(p)} className={`flex w-full items-center justify-between px-3 py-2 text-left ${i === sel ? (out(p) ? 'bg-red-700 text-white' : lowDetail(p) ? 'bg-amber-600 text-white' : 'bg-brand text-white') : out(p) ? 'bg-red-50 text-red-700' : lowDetail(p) ? 'bg-amber-50 text-amber-800' : i % 2 ? 'bg-slate-50' : 'bg-white'}`}>
+                  <div key={p.id} role="button" tabIndex={0} onMouseEnter={() => setSel(i)} onClick={() => add(p)} onKeyDown={(e) => { if (e.key === 'Enter') add(p); }} className={`flex w-full cursor-pointer items-center justify-between px-3 py-2 text-left ${i === sel ? (out(p) ? 'bg-red-700 text-white' : lowDetail(p) ? 'bg-amber-600 text-white' : 'bg-brand text-white') : out(p) ? 'bg-red-50 text-red-700' : lowDetail(p) ? 'bg-amber-50 text-amber-800' : i % 2 ? 'bg-slate-50' : 'bg-white'}`}>
                     <span><b>{p.name}</b> {p.detail && <span title="Produit détaillable (vendu à l’unité)" className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold ${i === sel ? 'bg-white/25' : 'bg-teal-100 text-teal-800'}`}>✂ détail</span>} {p.prescriptionRequired && <Badge tone="warn">ordonnance</Badge>} {p.priceFree && <Badge tone="info">prix libre</Badge>}</span>
-                    <span className="whitespace-nowrap font-bold">{p.priceFree ? '—' : fcfa(p.salePrice)} <span className={out(p) ? 'font-extrabold' : 'font-normal opacity-80'}>({p.stock ?? '?'})</span></span>
-                  </button>
+                    <span className="flex items-center gap-2 whitespace-nowrap font-bold">
+                      {out(p) && can('sales.hold') && <button type="button" className="rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-extrabold text-red-700 hover:bg-white" onClick={(e) => { e.stopPropagation(); setHoldFor(p); }}>🧾 Avoir</button>}
+                      {p.priceFree ? '—' : fcfa(p.salePrice)} <span className={out(p) ? 'font-extrabold' : 'font-normal opacity-80'}>({p.stock ?? '?'})</span>
+                    </span>
+                  </div>
                 ))}
               </div>
             )}
@@ -364,6 +409,7 @@ function PosCore({ workMode, onSwitch, onDirect }: { workMode: WorkMode; onSwitc
               <button className="btn-alt !py-1" onClick={() => { setEquiv(null); search.current?.focus(); }}>Ignorer</button>
             </div>
           )}
+          {holdFor && <HoldModal product={holdFor} onClose={() => { setHoldFor(null); search.current?.focus(); }} />}
           <div className="card">
             {cart.length === 0 ? <p className="text-sm text-ink-muted">Le panier est vide. Scannez un produit.</p> : (
               <table className="w-full">
