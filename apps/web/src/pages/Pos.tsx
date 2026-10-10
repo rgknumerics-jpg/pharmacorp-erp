@@ -3,7 +3,7 @@ import { api, can, getSession, restoreBaseSession, Session, switchOperator } fro
 import { dateTimeFr, fcfa, PAY_LABEL } from '../lib/format';
 import { Badge, ErrorBox, Modal, PageTitle, useDebounced } from '../components/ui';
 import { CashSession, CloseCash, ExpenseForm, OpenCash, ShiftReminder, useShift } from '../components/CashDesk';
-import { Advice, BasketAdvice, OfferGate } from '../components/PlantAdvice';
+import { Advice, BasketAdvice, DailyTipBanner, OfferGate } from '../components/PlantAdvice';
 import { BrandingData, loadBranding } from '../lib/branding';
 import { printReceipt, printProductHold, printVoucher } from '../lib/print';
 import { byCodeLocal, catalogDate, enqueue, flush, isNetworkError, queue, refreshCatalog, searchLocal } from '../lib/offline';
@@ -375,6 +375,7 @@ function PosCore({ workMode, onSwitch, onDirect }: { workMode: WorkMode; onSwitc
         <span><Key k="F2" /> recherche</span><span><Key k="↑↓" /> choisir</span><span><Key k="Entrée" /> ajouter</span><span><Key k="+" /><Key k="-" /> quantité</span><span><Key k="Suppr" /> retirer</span>
         <span><Key k="F4" /> client</span><span><Key k="F5" /> espèces</span><span><Key k="F6" /> groupé</span><span><Key k="F7" /> multiple</span><span><Key k="F8" /> encaisser</span><span><Key k="Échap" /> annuler</span>
       </div>
+      <div className="mb-3"><DailyTipBanner /></div>
       <div className="grid gap-4 lg:grid-cols-[1fr_400px]">
         <div className="space-y-3">
           {isCashier && <TicketQueue activeId={ticketId} onPick={loadTicket} />}

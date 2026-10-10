@@ -66,11 +66,12 @@ export function PlantModal({ id, onClose }: { id: string; onClose: () => void })
   );
 }
 
-function SuggestionCard({ s, onAdd }: { s: Suggestion; onAdd?: (productId: string) => void }) {
+function SuggestionCard({ s, onAdd, onClose }: { s: Suggestion; onAdd?: (productId: string) => void; onClose?: () => void }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-xl border border-emerald-300 bg-white p-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="relative rounded-xl border border-emerald-300 bg-white p-3">
+      {onClose && <button className="absolute right-2 top-2 text-ink-muted hover:text-ink" aria-label="Fermer ce conseil" onClick={onClose}>✕</button>}
+      <div className="flex flex-wrap items-center gap-2 pr-5">
         <b className="text-base">🌿 {s.plante.nom}</b>
         <span className="text-xs text-ink-muted"><i>{s.plante.nomLatin}</i></span>
         <button className="btn-alt ml-auto !py-0.5 text-xs" onClick={() => setOpen(true)}>Fiche complète</button>
@@ -155,7 +156,7 @@ export function BasketAdvice({ productIds, onAdd }: { productIds: string[]; onAd
       )}
       <div className="grid gap-2 md:grid-cols-2">
         {visible.map((s) => (
-          <SuggestionCard key={s.plante.id} s={s} onAdd={onAdd} />
+          <SuggestionCard key={s.plante.id} s={s} onAdd={onAdd} onClose={() => setHidden((h) => new Set([...h, s.plante.id]))} />
         ))}
       </div>
       {data.ecartees.length > 0 && <div className="text-xs text-ink-muted">Écartées pour sécurité : {data.ecartees.map((e) => `${e.plante.nom} (${e.raison})`).join(' · ')}</div>}
@@ -182,6 +183,29 @@ export function ProductPlantPanel({ productId }: { productId: string }) {
       <div className="grid gap-2 md:grid-cols-2">{data.suggestions.map((s) => <SuggestionCard key={s.plante.id} s={s} />)}</div>
       <Disclaimer text={data.avertissement} />
       {open && <PlantModal id={open} onClose={() => setOpen(null)} />}
+    </div>
+  );
+}
+
+/** Conseil du jour, compact et fermable, affiché directement sur l'écran de caisse (pas seulement au Cockpit).
+ * Fermé une fois = ne revient plus avant le lendemain (mémorisé par poste, pas par le serveur). */
+export function DailyTipBanner() {
+  const today = new Date().toISOString().slice(0, 10);
+  const dismissKey = `erp.tipDismissed.${today}`;
+  const [dismissed, setDismissed] = useState(() => { try { return localStorage.getItem(dismissKey) === '1'; } catch { return false; } });
+  const { data } = useLoad(() => api<{ plante: Fiche; besoins: { id: string; libelle: string }[] }>('/plants/today'));
+  const [open, setOpen] = useState(false);
+  if (dismissed || !data || !can('plants.read')) return null;
+  const p = data.plante;
+  function close() { setDismissed(true); try { localStorage.setItem(dismissKey, '1'); } catch { /* stockage indisponible */ } }
+  return (
+    <div className="no-print relative flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm">
+      <Badge tone="ok">Conseil du jour</Badge>
+      <b>🌿 {p.nom}</b>
+      {data.besoins[0] && <span className="hidden text-xs text-ink-muted sm:inline">— {data.besoins[0].libelle}</span>}
+      <button className="ml-auto text-xs font-bold text-brand underline" onClick={() => setOpen(true)}>Voir</button>
+      <button className="text-ink-muted hover:text-ink" aria-label="Fermer le conseil du jour" onClick={close}>✕</button>
+      {open && <PlantModal id={p.id} onClose={() => setOpen(false)} />}
     </div>
   );
 }
