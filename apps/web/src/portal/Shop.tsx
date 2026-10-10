@@ -201,23 +201,48 @@ function Orders({ slug, token, info }: { slug: string; token: string; info: any 
   );
 }
 
+/** Indicatifs proposés par défaut : pays voisins les plus probables pour une pharmacie en Afrique centrale, puis quelques autres courants. Le client peut toujours choisir « Autre » et saisir son numéro complet. */
+const COUNTRIES: { dial: string; flag: string; name: string; tz: string[] }[] = [
+  { dial: '242', flag: '🇨🇬', name: 'Congo-Brazzaville', tz: ['Africa/Brazzaville'] },
+  { dial: '243', flag: '🇨🇩', name: 'RD Congo', tz: ['Africa/Kinshasa', 'Africa/Lubumbashi'] },
+  { dial: '237', flag: '🇨🇲', name: 'Cameroun', tz: ['Africa/Douala'] },
+  { dial: '241', flag: '🇬🇦', name: 'Gabon', tz: ['Africa/Libreville'] },
+  { dial: '236', flag: '🇨🇫', name: 'Centrafrique', tz: ['Africa/Bangui'] },
+  { dial: '240', flag: '🇬🇶', name: 'Guinée équatoriale', tz: ['Africa/Malabo'] },
+  { dial: '244', flag: '🇦🇴', name: 'Angola', tz: ['Africa/Luanda'] },
+  { dial: '33', flag: '🇫🇷', name: 'France', tz: ['Europe/Paris'] },
+];
+/** Devine l'indicatif par le fuseau horaire de l'appareil (aucune permission requise, contrairement à la géolocalisation) ; toujours modifiable à la main. */
+function guessDial(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return COUNTRIES.find((c) => c.tz.includes(tz))?.dial ?? '242';
+  } catch { return '242'; }
+}
+
 function Auth({ slug, registration, accent, onClose, onToken }: { slug: string; registration: boolean; accent?: string; onClose: () => void; onToken: (t: string) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [dial, setDial] = useState(guessDial);
   const [f, setF] = useState({ name: '', phone: '', email: '', password: '' });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email);
-  const ok = useMemo(() => f.phone.length >= 8 && f.password.length >= 6 && (mode === 'login' || (f.name.trim().length >= 2 && emailOk)), [f, mode, emailOk]);
+  const ok = useMemo(() => f.phone.replace(/\D/g, '').length >= 6 && f.password.length >= 6 && (mode === 'login' || (f.name.trim().length >= 2 && emailOk)), [f, mode, emailOk]);
   async function go() {
     setBusy(true); setErr(null);
-    try { const r = await papi(`/online/${slug}/${mode}`, { json: f }); onToken(r.token); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+    try { const r = await papi(`/online/${slug}/${mode}`, { json: { ...f, phone: `${dial}${f.phone.replace(/\D/g, '')}` } }); onToken(r.token); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   }
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
       <div className="w-full max-w-md space-y-3 rounded-t-2xl bg-white p-5 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex gap-2">{(['login', 'register'] as const).filter((m) => m === 'login' || registration).map((m) => <button key={m} className={`flex-1 rounded-lg py-2 text-sm font-bold ${mode === m ? (accent ? 'text-white' : 'bg-brand text-white') : 'bg-slate-100'}`} style={mode === m ? { backgroundColor: accent } : undefined} onClick={() => setMode(m)}>{m === 'login' ? 'Connexion' : 'Créer mon compte'}</button>)}</div>
         {mode === 'register' && <input className="w-full rounded-lg border border-slate-300 px-3 py-3" placeholder="Votre nom et prénom" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />}
-        <input className="w-full rounded-lg border border-slate-300 px-3 py-3" inputMode="tel" placeholder="Numéro WhatsApp (ex. 06 123 45 67)" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+        <div className="flex gap-1.5">
+          <select className="w-28 shrink-0 rounded-lg border border-slate-300 px-1 py-3 text-sm" value={dial} onChange={(e) => setDial(e.target.value)}>
+            {COUNTRIES.map((c) => <option key={c.dial} value={c.dial}>{c.flag} +{c.dial}</option>)}
+          </select>
+          <input className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-3" inputMode="tel" placeholder={dial === '242' ? '06 123 45 67' : 'Numéro WhatsApp'} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+        </div>
         {mode === 'register' && <input className="w-full rounded-lg border border-slate-300 px-3 py-3" type="email" placeholder="Adresse e-mail" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />}
         <input className="w-full rounded-lg border border-slate-300 px-3 py-3" type="password" placeholder="Mot de passe (6 caractères minimum)" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter' && ok) go(); }} />
         {err && <p className="text-sm font-bold text-red-700">{err}</p>}
