@@ -20,6 +20,17 @@ export default function Shop({ slug }: { slug: string }) {
 
   useEffect(() => { papi(`/online/${slug}/info`).then(setInfo).catch((e) => setErr(e.message)); }, [slug]);
   useEffect(() => { store.set(KEY + '.cart', cart); }, [cart, KEY]);
+  // La marque de la boutique (ex. « Rive Gauche ») est distincte de l'ERP qui la fait fonctionner :
+  // le client ne doit voir ni le nom ni le logo de l'ERP dans l'onglet du navigateur.
+  useEffect(() => {
+    if (!info) return;
+    document.title = info.name || 'Boutique en ligne';
+    if (info.logoUrl) {
+      let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+      if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+      link.href = info.logoUrl;
+    }
+  }, [info]);
   const logout = useCallback(() => { setToken(null); store.set(KEY + '.token', null); setView('catalog'); }, [KEY]);
 
   // notifications du client (commande acceptée, prête, en route, livrée, paiement reçu)
@@ -52,7 +63,7 @@ export default function Shop({ slug }: { slug: string }) {
         </div>
       </header>
       <main className="p-3">
-        {view === 'catalog' && <Catalog slug={slug} cart={cart} setCart={setCart} accent={accent} onCart={() => setView('cart')} count={count} />}
+        {view === 'catalog' && <Catalog slug={slug} cart={cart} setCart={setCart} accent={accent} banners={info.banners} onCart={() => setView('cart')} count={count} />}
         {view === 'cart' && <Cart slug={slug} info={info} cart={cart} setCart={setCart} token={token} needLogin={() => setAuth(true)} done={() => { setCart({}); setView('orders'); }} />}
         {view === 'orders' && token && <Orders slug={slug} token={token} info={info} />}
       </main>
@@ -70,9 +81,15 @@ export default function Shop({ slug }: { slug: string }) {
 
 const CAT_ICON = ['💊', '🧴', '🧼', '🩹', '🍼', '🌿', '💉', '🦷', '👶', '🧽'];
 
-function Catalog({ slug, cart, setCart, accent, onCart, count }: { slug: string; cart: Record<string, { item: Item; qty: number }>; setCart: (c: Record<string, { item: Item; qty: number }>) => void; accent?: string; onCart: () => void; count: number }) {
+function Catalog({ slug, cart, setCart, accent, banners, onCart, count }: { slug: string; cart: Record<string, { item: Item; qty: number }>; setCart: (c: Record<string, { item: Item; qty: number }>) => void; accent?: string; banners?: { imageUrl: string; title: string; link: string }[]; onCart: () => void; count: number }) {
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('');
+  const [bi, setBi] = useState(0);
+  useEffect(() => {
+    if (!banners || banners.length < 2) return;
+    const id = setInterval(() => setBi((x) => (x + 1) % banners.length), 5000);
+    return () => clearInterval(id);
+  }, [banners]);
   const [data, setData] = useState<{ total: number; categories: { id: string; name: string }[]; items: Item[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
@@ -93,7 +110,17 @@ function Catalog({ slug, cart, setCart, accent, onCart, count }: { slug: string;
         </div>
       )}
 
-      {!q && !category && (
+      {!q && !category && banners && banners.length > 0 && (
+        <a href={banners[bi]?.link || undefined} target={banners[bi]?.link ? '_blank' : undefined} rel="noreferrer" className="block overflow-hidden rounded-2xl shadow-sm">
+          <div className="relative">
+            <img src={banners[bi].imageUrl} alt={banners[bi].title} className="h-32 w-full object-cover" />
+            {banners[bi].title && <div className="absolute inset-x-0 bottom-0 bg-black/40 p-2 text-sm font-extrabold text-white">{banners[bi].title}</div>}
+          </div>
+          {banners.length > 1 && <div className="flex justify-center gap-1 bg-white py-1.5">{banners.map((_, i) => <span key={i} className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: i === bi ? (accent ?? '#047234') : '#cbd5e1' }} />)}</div>}
+        </a>
+      )}
+
+      {!q && !category && (!banners || !banners.length) && (
         <div className="overflow-hidden rounded-2xl text-white shadow-sm" style={{ backgroundColor: accent ?? '#047234' }}>
           <div className="p-4">
             <div className="text-xs font-bold uppercase tracking-wide opacity-80">Commande en ligne</div>

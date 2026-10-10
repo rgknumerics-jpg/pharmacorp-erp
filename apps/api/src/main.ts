@@ -13,7 +13,7 @@ async function bootstrap(): Promise<void> {
 
   // Relevee au-dela du defaut Express (100kb) : le logo de marque de l'application client
   // (Reglages > Habillage) voyage en data URL dans le JSON des reglages.
-  app.use(json({ limit: '2mb' }));
+  app.use(json({ limit: '8mb' }));
 
   // Liste blanche d'origines : jamais "origin: true" avec credentials:true (n'importe quel site pourrait
   // alors appeler l'API avec les jetons d'une victime connectee). CORS_ORIGINS (variable d'environnement,

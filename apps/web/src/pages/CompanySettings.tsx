@@ -58,6 +58,33 @@ function ZoneEditor({ zones, onChange }: { zones: { name: string; fee: number }[
   );
 }
 
+/** Bannières publicitaires affichées en haut de la boutique (image + titre/lien facultatifs). */
+function BannerEditor({ banners, onChange }: { banners: { imageUrl: string; title: string; link: string }[]; onChange: (v: { imageUrl: string; title: string; link: string }[]) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const set = (i: number, patch: Record<string, string>) => { const n = [...banners]; n[i] = { ...n[i], ...patch }; onChange(n); };
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <div className="mb-2 text-sm font-extrabold">Bannières publicitaires</div>
+      <p className="mb-2 text-xs text-ink-muted">Affichées en haut du catalogue de la boutique, les unes après les autres. Un lien (facultatif) peut renvoyer vers une catégorie ou une page externe.</p>
+      <div className="space-y-2">{banners.map((b, i) => (
+        <div key={i} className="flex items-center gap-2 rounded-lg bg-white p-2 ring-1 ring-ink-line">
+          <div className="flex h-12 w-20 shrink-0 items-center justify-center overflow-hidden rounded bg-slate-100">{b.imageUrl ? <img src={b.imageUrl} alt="" className="h-full w-full object-cover" /> : <span className="text-[10px] text-ink-muted">—</span>}</div>
+          <div className="flex-1 space-y-1">
+            <input className="w-full" placeholder="Titre (facultatif)" value={b.title} onChange={(e) => set(i, { title: e.target.value })} />
+            <input className="w-full" placeholder="Lien (facultatif, ex. https://…)" value={b.link} onChange={(e) => set(i, { link: e.target.value })} />
+          </div>
+          <button className="text-red-600" onClick={() => onChange(banners.filter((_, j) => j !== i))}>×</button>
+        </div>
+      ))}{!banners.length && <span className="text-xs text-ink-muted">Aucune bannière.</span>}</div>
+      <label className="btn-alt mt-2 inline-block cursor-pointer !py-1.5 text-xs">{busy ? 'Chargement…' : '+ Ajouter une bannière'}
+        <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={busy} onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; setBusy(true); try { onChange([...banners, { imageUrl: await shrink(f), title: '', link: '' }]); } catch (x) { setErr((x as Error).message); } finally { setBusy(false); } }} />
+      </label>
+      {err && <p className="mt-1 text-xs font-bold text-red-700">{err}</p>}
+    </div>
+  );
+}
+
 export function SettingsSection() {
   const write = can('company.manage');
   const { data, error, setData } = useLoad(() => api<any>('/company/settings'), []);
@@ -125,6 +152,7 @@ export function SettingsSection() {
           <Toggle on={data.online.delivery} onChange={(v) => set('online', { delivery: v })} label="Livraison" hint="Le livreur est notifié à chaque paiement validé" />
         </div>
         {data.online.delivery && <ZoneEditor zones={data.online.deliveryZones} onChange={(v) => set('online', { deliveryZones: v })} />}
+        <BannerEditor banners={data.online.banners} onChange={(v) => set('online', { banners: v })} />
         <div className="rounded-xl bg-slate-50 p-3">
           <div className="mb-2 text-sm font-extrabold">Habillage (nom, logo, couleur)</div>
           <p className="mb-2 text-xs text-ink-muted">Laissez vide pour reprendre le nom et le logo de la pharmacie. Renseignez ces champs si l’application client a sa propre marque (ex. « Rive Gauche »).</p>

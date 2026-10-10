@@ -45,7 +45,7 @@ export class OnlineService {
       primaryColor: online.primaryColor || null,
       address: p?.address ?? null, city: p?.city ?? null, phone: p?.phone ?? null,
       registration: online.registration, delivery: online.delivery,
-      deliveryZones: online.deliveryZones,
+      deliveryZones: online.deliveryZones, banners: online.banners,
     };
   }
 
