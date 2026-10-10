@@ -4,6 +4,11 @@ GRANT REFERENCES ON "tenants" TO erp_app;
 GRANT REFERENCES ON "users" TO erp_app;
 
 -- Reseau de pharmacies : code de reseau choisi par le titulaire (null = pas en reseau).
+-- ALTER TABLE / CREATE INDEX sur une table preexistante exigent d'en etre proprietaire, pas seulement d'avoir
+-- les GRANT habituels. Sur la base de production (ou "tenants" appartient a neondb_owner, cree avant erp_app --
+-- incident du 2026-10-10), ce fichier doit etre rejoue entierement via le role proprietaire, puis
+-- `prisma migrate resolve --applied` ; sur une base neuve (locale, CI) ou erp_app possede les tables depuis la
+-- genese, `migrate deploy` l'applique normalement.
 ALTER TABLE "tenants" ADD COLUMN "network_code" TEXT;
 CREATE INDEX "tenants_network_code_idx" ON "tenants"("network_code");
 
