@@ -110,7 +110,10 @@ export class SalesService {
         if (l.discount && !canDiscount) throw new ForbiddenException('Vous n\'etes pas autorise a accorder une remise.');
         if (l.lotId && !l.overrideReason) throw new BadRequestException('Motif obligatoire pour vendre un lot hors ordre FEFO.');
       }
-      await this.stock.lockProducts(tx, productIds);
+      // Les produits parents d'un article detaillable sont aussi verrouilles : le delotage automatique
+      // (ensureUnitStock ci-dessous) lit et ecrit leur stock, deux ventes concurrentes ne doivent pas s'entrecroiser.
+      const parentIds = (await tx.product.findMany({ where: { tenantId: user.tenantId, unitProductId: { in: productIds } }, select: { id: true } })).map((x) => x.id);
+      await this.stock.lockProducts(tx, [...productIds, ...parentIds]);
       const today = new Date(new Date().toISOString().slice(0, 10));
       const promos = await tx.promotion.findMany({ where: { isActive: true, startDate: { lte: today }, endDate: { gte: today } } });
 
@@ -153,6 +156,9 @@ export class SalesService {
         const lineDiscount = Math.min(lineGross, (l.discount ?? 0) + (promo?.discount ?? 0));
         if (lineDiscount > lineGross) throw new BadRequestException('Remise superieure au montant de la ligne.');
 
+        // Produit "a l'unite" (detaillable) : ouvre automatiquement les boites du produit parent qui manquent
+        // avant d'allouer, pour que la vente ne s'interrompe jamais sur une rupture purement interne.
+        await this.stock.ensureUnitStock(tx, user.tenantId, user.userId, p.id, l.quantity);
         const allocations = await this.stock.allocate(tx, p, l.quantity, l.lotId);
         let first = true;
         for (const a of allocations) {

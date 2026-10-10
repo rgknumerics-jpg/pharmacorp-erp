@@ -107,8 +107,10 @@ function PinGate({ mode, onCancel }: { mode: WorkMode; onCancel?: () => void }) 
     </div>
   );
 }
-/** Produit à rupture (stock nul ou négatif) : affiché en rouge à la recherche. */
-const out = (p: { stock?: number }) => p.stock !== undefined && p.stock <= 0;
+/** Produit à rupture (stock nul ou négatif) : affiché en rouge à la recherche. Un produit détaillable n'est
+ * jamais un vrai manque (la boîte parente se délote automatiquement à la vente) : il garde sa propre couleur. */
+const out = (p: { stock?: number; detail?: boolean }) => p.stock !== undefined && p.stock <= 0 && !p.detail;
+const lowDetail = (p: { stock?: number; detail?: boolean }) => !!p.detail && p.stock !== undefined && p.stock <= 0;
 
 function PosCore({ workMode, onSwitch, onDirect }: { workMode: WorkMode; onSwitch?: () => void; onDirect?: () => void }) {
   const isSeller = workMode === 'seller', isCashier = workMode === 'cashier';
@@ -346,7 +348,7 @@ function PosCore({ workMode, onSwitch, onDirect }: { workMode: WorkMode; onSwitc
             {results.length > 0 && (
               <div className="mt-2 overflow-hidden rounded-lg border border-ink-line">
                 {results.map((p, i) => (
-                  <button key={p.id} onMouseEnter={() => setSel(i)} onClick={() => add(p)} className={`flex w-full items-center justify-between px-3 py-2 text-left ${i === sel ? (out(p) ? 'bg-red-700 text-white' : 'bg-brand text-white') : out(p) ? 'bg-red-50 text-red-700' : i % 2 ? 'bg-slate-50' : 'bg-white'}`}>
+                  <button key={p.id} onMouseEnter={() => setSel(i)} onClick={() => add(p)} className={`flex w-full items-center justify-between px-3 py-2 text-left ${i === sel ? (out(p) ? 'bg-red-700 text-white' : lowDetail(p) ? 'bg-amber-600 text-white' : 'bg-brand text-white') : out(p) ? 'bg-red-50 text-red-700' : lowDetail(p) ? 'bg-amber-50 text-amber-800' : i % 2 ? 'bg-slate-50' : 'bg-white'}`}>
                     <span><b>{p.name}</b> {p.detail && <span title="Produit détaillable (vendu à l’unité)" className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold ${i === sel ? 'bg-white/25' : 'bg-teal-100 text-teal-800'}`}>✂ détail</span>} {p.prescriptionRequired && <Badge tone="warn">ordonnance</Badge>} {p.priceFree && <Badge tone="info">prix libre</Badge>}</span>
                     <span className="whitespace-nowrap font-bold">{p.priceFree ? '—' : fcfa(p.salePrice)} <span className={out(p) ? 'font-extrabold' : 'font-normal opacity-80'}>({p.stock ?? '?'})</span></span>
                   </button>

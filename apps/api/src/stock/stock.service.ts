@@ -106,6 +106,39 @@ export class StockService {
     return allocateFefo(lots, quantity, product.oversellTolerance);
   }
 
+  /**
+   * Delotage automatique a la vente : si `unitProductId` est un produit "a l'unite" (issu d'un deconditionnement,
+   * ARCHITECTURE.md -- Achats) et que son stock ne couvre pas `neededQty`, ouvre juste assez de boites du produit
+   * parent (FEFO) pour combler l'ecart, avant que l'allocation normale ne s'execute. Ne fait rien si ce n'est pas
+   * un produit detaillable, ou si le stock est deja suffisant ; ne leve jamais d'erreur -- un manque residuel est
+   * simplement laisse a l'allocation (tolerance de survente), comme pour n'importe quel autre produit.
+   */
+  async ensureUnitStock(tx: Tx, tenantId: string, userId: string | undefined, unitProductId: string, neededQty: number): Promise<void> {
+    const parent = await tx.product.findFirst({ where: { tenantId, unitProductId } });
+    if (!parent || !parent.unitsPerBox || parent.unitsPerBox < 2) return;
+    const onHand = (await tx.inventoryMovement.aggregate({ where: { productId: unitProductId, depotId: null }, _sum: { quantity: true } }))._sum.quantity ?? 0;
+    const shortfall = neededQty - onHand;
+    if (shortfall <= 0) return;
+    let boxesNeeded = Math.ceil(shortfall / parent.unitsPerBox);
+    const lots = parent.trackLots
+      ? await this.sellableLots(tx, parent.id)
+      : [{ lotId: '__none__', lotNumber: 'SANS-LOT', expiryDate: null, available: Math.max(0, (await tx.inventoryMovement.aggregate({ where: { productId: parent.id, depotId: null }, _sum: { quantity: true } }))._sum.quantity ?? 0) }];
+    for (const lot of lots) {
+      if (boxesNeeded <= 0) break;
+      const boxes = Math.min(boxesNeeded, Math.max(0, lot.available));
+      if (boxes <= 0) continue;
+      const unitLot = await tx.lot.upsert({
+        where: { tenantId_productId_lotNumber: { tenantId, productId: unitProductId, lotNumber: lot.lotNumber } },
+        create: { tenantId, productId: unitProductId, lotNumber: lot.lotNumber, expiryDate: lot.expiryDate, createdById: userId },
+        update: {},
+      });
+      const reason = `Déconditionnement automatique de ${boxes} boîte(s) en ${boxes * parent.unitsPerBox} unité(s) (vente)`;
+      await tx.inventoryMovement.create({ data: { tenantId, productId: parent.id, lotId: lot.lotId === '__none__' ? null : lot.lotId, quantity: -boxes, type: 'unpack', reason, createdById: userId, refType: 'product', refId: unitProductId } });
+      await tx.inventoryMovement.create({ data: { tenantId, productId: unitProductId, lotId: unitLot.id, quantity: boxes * parent.unitsPerBox, type: 'unpack', reason, createdById: userId, refType: 'product', refId: parent.id } });
+      boxesNeeded -= boxes;
+    }
+  }
+
   addMovement(
     tx: Tx,
     data: {
