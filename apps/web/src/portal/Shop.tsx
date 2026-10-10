@@ -41,7 +41,7 @@ export default function Shop({ slug }: { slug: string }) {
   const accentTextStyle = accent ? { color: accent } : undefined;
 
   return (
-    <div className="mx-auto min-h-screen max-w-3xl bg-slate-50 pb-20">
+    <div className="mx-auto min-h-screen max-w-3xl bg-slate-100 pb-24">
       <header className={`sticky top-0 z-10 flex items-center justify-between px-4 py-3 text-white shadow ${accent ? '' : 'bg-brand'}`} style={accentStyle}>
         <div className="flex items-center gap-3">
           {info.logoUrl && <img src={info.logoUrl} alt={info.name} className="h-10 w-10 rounded-full bg-white object-contain p-0.5" />}
@@ -51,22 +51,26 @@ export default function Shop({ slug }: { slug: string }) {
           {token ? <button className="rounded-full bg-white/20 px-3 py-1 text-sm font-bold" onClick={logout}>Déconnexion</button> : <button className={`rounded-full bg-white px-3 py-1 text-sm font-bold ${accent ? '' : 'text-brand'}`} style={accentTextStyle} onClick={() => setAuth(true)}>Connexion</button>}
         </div>
       </header>
-      <nav className="sticky top-[58px] z-10 flex border-b bg-white text-sm font-bold">
-        {([['catalog', '💊 Produits'], ['cart', `🛒 Panier${count ? ` (${count})` : ''}`], ['orders', `📦 Mes commandes${unread ? ` •${unread}` : ''}`]] as const).map(([k, l]) => (
-          <button key={k} onClick={() => (k === 'orders' && !token ? setAuth(true) : setView(k))} className={`flex-1 px-2 py-3 ${view === k ? `border-b-4 ${accent ? '' : 'border-brand text-brand'}` : 'text-slate-500'}`} style={view === k ? { borderColor: accent, color: accent } : undefined}>{l}</button>
-        ))}
-      </nav>
       <main className="p-3">
-        {view === 'catalog' && <Catalog slug={slug} cart={cart} setCart={setCart} accent={accent} />}
+        {view === 'catalog' && <Catalog slug={slug} cart={cart} setCart={setCart} accent={accent} onCart={() => setView('cart')} count={count} />}
         {view === 'cart' && <Cart slug={slug} info={info} cart={cart} setCart={setCart} token={token} needLogin={() => setAuth(true)} done={() => { setCart({}); setView('orders'); }} />}
         {view === 'orders' && token && <Orders slug={slug} token={token} info={info} />}
       </main>
       {auth && <Auth slug={slug} registration={info.registration} accent={accent} onClose={() => setAuth(false)} onToken={(t) => { setToken(t); store.set(KEY + '.token', t); setAuth(false); }} />}
+      <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-3xl border-t bg-white shadow-[0_-2px_10px_rgba(0,0,0,.06)]">
+        {([['catalog', '🏠', 'Accueil'], ['cart', '🛒', `Panier${count ? ` (${count})` : ''}`], ['orders', '📦', `Commandes${unread ? ` •${unread}` : ''}`]] as const).map(([k, icon, l]) => (
+          <button key={k} onClick={() => (k === 'orders' && !token ? setAuth(true) : setView(k))} className="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-bold" style={view === k ? accentTextStyle ?? { color: '#047234' } : { color: '#64748b' }}>
+            <span className="text-lg leading-none">{icon}</span>{l}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
 
-function Catalog({ slug, cart, setCart, accent }: { slug: string; cart: Record<string, { item: Item; qty: number }>; setCart: (c: Record<string, { item: Item; qty: number }>) => void; accent?: string }) {
+const CAT_ICON = ['💊', '🧴', '🧼', '🩹', '🍼', '🌿', '💉', '🦷', '👶', '🧽'];
+
+function Catalog({ slug, cart, setCart, accent, onCart, count }: { slug: string; cart: Record<string, { item: Item; qty: number }>; setCart: (c: Record<string, { item: Item; qty: number }>) => void; accent?: string; onCart: () => void; count: number }) {
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('');
   const [data, setData] = useState<{ total: number; categories: { id: string; name: string }[]; items: Item[] } | null>(null);
@@ -77,22 +81,53 @@ function Catalog({ slug, cart, setCart, accent }: { slug: string; cart: Record<s
   }, [slug, q, category]);
   const add = (item: Item) => setCart({ ...cart, [item.id]: { item, qty: Math.min(20, (cart[item.id]?.qty ?? 0) + 1) } });
   return (
-    <div className="space-y-3">
-      <input className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base" placeholder="🔎 Rechercher un produit…" value={q} onChange={(e) => setQ(e.target.value)} />
-      {data && data.categories.length > 0 && <select className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">Toutes les catégories</option>{data.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+    <div className="relative space-y-3">
+      <input className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base shadow-sm" placeholder="🔎 Rechercher un produit…" value={q} onChange={(e) => setQ(e.target.value)} />
+
+      {data && data.categories.length > 0 && (
+        <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1">
+          <button onClick={() => setCategory('')} className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${category === '' ? 'text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'}`} style={category === '' ? { backgroundColor: accent ?? '#047234' } : undefined}>Tout</button>
+          {data.categories.map((c, i) => (
+            <button key={c.id} onClick={() => setCategory(c.id)} className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold ${category === c.id ? 'text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'}`} style={category === c.id ? { backgroundColor: accent ?? '#047234' } : undefined}>{CAT_ICON[i % CAT_ICON.length]} {c.name}</button>
+          ))}
+        </div>
+      )}
+
+      {!q && !category && (
+        <div className="overflow-hidden rounded-2xl text-white shadow-sm" style={{ backgroundColor: accent ?? '#047234' }}>
+          <div className="p-4">
+            <div className="text-xs font-bold uppercase tracking-wide opacity-80">Commande en ligne</div>
+            <div className="mt-0.5 text-xl font-extrabold leading-tight">Vos produits livrés<br />ou prêts au comptoir</div>
+            <div className="mt-2 text-sm opacity-90">Parcourez le catalogue, ajoutez au panier, payez en Mobile Money ou à la remise.</div>
+          </div>
+        </div>
+      )}
+
       {err && <p className="text-sm text-red-600">{err}</p>}
-      <div className="space-y-2">
-        {data?.items.map((i) => (
-          <div key={i.id} className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 shadow-sm">
-            <div className="min-w-0"><div className="font-bold leading-tight">{i.name}</div><div className="text-xs text-slate-500">{[i.dci, i.dosage, i.form].filter(Boolean).join(' · ')}</div><div className={`mt-1 font-extrabold ${accent ? '' : 'text-brand'}`} style={accent ? { color: accent } : undefined}>{fcfa(i.salePrice)}</div></div>
-            <div className="shrink-0 text-right">
-              <div className={`mb-1 text-xs font-bold ${i.available ? 'text-emerald-700' : 'text-red-600'}`}>{i.available ? '● Disponible' : '○ Indisponible'}</div>
-              <button disabled={!i.available} onClick={() => add(i)} className={`rounded-full px-4 py-1.5 text-sm font-bold text-white disabled:opacity-30 ${accent ? '' : 'bg-brand'}`} style={accent ? { backgroundColor: accent } : undefined}>{cart[i.id] ? `+1 (${cart[i.id].qty})` : 'Ajouter'}</button>
+
+      <div className="grid grid-cols-2 gap-3">
+        {data?.items.map((i, k) => (
+          <div key={i.id} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm">
+            <div className="flex h-24 items-center justify-center text-4xl" style={{ backgroundColor: `${accent ?? '#047234'}14` }}>{CAT_ICON[k % CAT_ICON.length]}</div>
+            <div className="flex flex-1 flex-col gap-1 p-2.5">
+              <div className="line-clamp-2 min-h-[2.4em] text-sm font-bold leading-tight">{i.name}</div>
+              {(i.dci || i.dosage) && <div className="text-[11px] text-slate-500">{[i.dci, i.dosage, i.form].filter(Boolean).join(' · ')}</div>}
+              <div className="mt-auto flex items-center justify-between pt-1">
+                <span className="font-extrabold" style={accent ? { color: accent } : undefined}>{fcfa(i.salePrice)}</span>
+                {!i.available && <span className="text-[10px] font-bold text-red-600">Indispo.</span>}
+              </div>
+              <button disabled={!i.available} onClick={() => add(i)} className="w-full rounded-full py-1.5 text-xs font-extrabold text-white disabled:bg-slate-300 disabled:opacity-60" style={i.available ? { backgroundColor: accent ?? '#047234' } : undefined}>{cart[i.id] ? `Ajouté ×${cart[i.id].qty}` : '+ Ajouter'}</button>
             </div>
           </div>
         ))}
-        {data && !data.items.length && <p className="p-6 text-center text-slate-500">Aucun produit trouvé. Pour un médicament sur ordonnance, présentez-vous à la pharmacie.</p>}
+        {data && !data.items.length && <p className="col-span-2 p-6 text-center text-slate-500">Aucun produit trouvé. Pour un médicament sur ordonnance, présentez-vous à la pharmacie.</p>}
       </div>
+
+      {count > 0 && (
+        <button onClick={onCart} className="fixed bottom-20 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full px-5 py-3 text-sm font-extrabold text-white shadow-lg" style={{ backgroundColor: accent ?? '#047234' }}>
+          🛒 Voir le panier ({count})
+        </button>
+      )}
     </div>
   );
 }
