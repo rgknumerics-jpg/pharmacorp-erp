@@ -22,6 +22,9 @@ model Tenant {
   slug      String   @unique
   country   String   @default("CG")
   isActive  Boolean  @default(true) @map("is_active")
+  /// Code de reseau choisi par le titulaire : les tenants qui partagent le meme code se voient mutuellement
+  /// pour les transferts de stock entre pharmacies (ARCHITECTURE.md -- Achats). Null = pas en reseau.
+  networkCode String? @map("network_code")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -115,6 +118,8 @@ model User {
   stockoutLogs  StockoutLog[]
   productHoldsCreated   ProductHold[] @relation("ProductHoldCreatedBy")
   productHoldsFulfilled ProductHold[] @relation("ProductHoldFulfilledBy")
+  transferRequestsMade    TransferRequest[] @relation("TransferRequestedBy")
+  transferRequestsHandled TransferRequest[] @relation("TransferRespondedBy")
 
   @@map("users")
 }
@@ -409,6 +414,38 @@ model ProductHold {
   @@unique([tenantId, number])
   @@index([tenantId, status, dueAt])
   @@map("product_holds")
+}
+
+/// Transfert de stock entre pharmacies d'un meme reseau (ARCHITECTURE.md -- Achats) : avant de commander chez
+/// un grossiste, verifier si une consoeur a le produit en surstock. Table volontairement hors RLS tenant
+/// classique : une regle dediee (requesting_tenant_id OU target_tenant_id = tenant courant) remplace
+/// l'isolation habituelle, puisque deux tenants doivent legitimement voir la meme ligne. Ni productId ni
+/// tenantId ne portent de relation Prisma vers l'autre cote : chaque pharmacie garde son propre catalogue
+/// prive, seul le nom du produit (et l'id source, a titre indicatif) traverse la frontiere.
+model TransferRequest {
+  id                   String   @id @default(uuid()) @db.Uuid
+  requestingTenantId   String   @map("requesting_tenant_id") @db.Uuid
+  requestingTenantName String   @map("requesting_tenant_name")
+  targetTenantId       String   @map("target_tenant_id") @db.Uuid
+  targetTenantName     String   @map("target_tenant_name")
+  productName          String   @map("product_name")
+  /// Identifiant du produit dans le catalogue de la pharmacie cible (indicatif ; jamais resolu via relation Prisma).
+  targetProductId      String?  @map("target_product_id")
+  quantity             Int
+  /// pending | accepted | rejected | shipped | received | cancelled
+  status               String   @default("pending")
+  note                 String?
+  requestedById        String?  @map("requested_by_id") @db.Uuid
+  respondedById        String?  @map("responded_by_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  requestedBy User? @relation("TransferRequestedBy", fields: [requestedById], references: [id])
+  respondedBy User? @relation("TransferRespondedBy", fields: [respondedById], references: [id])
+
+  @@index([requestingTenantId, status])
+  @@index([targetTenantId, status])
+  @@map("transfer_requests")
 }
 
 model Supplier {

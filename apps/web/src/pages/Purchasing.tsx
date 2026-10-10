@@ -8,18 +8,105 @@ import { Badge, ErrorBox, Field, Modal, PageTitle, useLoad } from '../components
 const ST: Record<string, ['ok' | 'warn' | 'bad' | 'info' | 'muted', string]> = { rupture: ['bad', 'rupture'], critique: ['bad', 'critique'], a_commander: ['warn', 'à commander'], surstock: ['info', 'surstock'], ok: ['ok', 'ok'], sans_vente: ['muted', 'sans vente'] };
 
 export default function Purchasing() {
-  const [tab, setTab] = useState<'proposals' | 'reorder' | 'stockouts' | 'suppliers' | 'invoices' | 'garde'>('proposals');
+  const [tab, setTab] = useState<'proposals' | 'reorder' | 'stockouts' | 'transfers' | 'suppliers' | 'invoices' | 'garde'>('proposals');
   return (
     <>
       <PageTitle title="Achats" sub="Quoi commander, chez qui, quand payer — et les semaines de garde" />
-      <div className="mb-3 flex flex-wrap gap-2">{([['proposals', 'Propositions de commande'], ['reorder', 'Réapprovisionnement'], ['stockouts', 'Ruptures recherchées'], ['suppliers', 'Fournisseurs'], ['invoices', 'Échéances fournisseurs'], ['garde', 'Semaines de garde']] as const).map(([k, l]) => <button key={k} className={tab === k ? 'btn' : 'btn-alt'} onClick={() => setTab(k)}>{l}</button>)}</div>
+      <div className="mb-3 flex flex-wrap gap-2">{([['proposals', 'Propositions de commande'], ['reorder', 'Réapprovisionnement'], ['stockouts', 'Ruptures recherchées'], ['transfers', 'Transferts'], ['suppliers', 'Fournisseurs'], ['invoices', 'Échéances fournisseurs'], ['garde', 'Semaines de garde']] as const).map(([k, l]) => <button key={k} className={tab === k ? 'btn' : 'btn-alt'} onClick={() => setTab(k)}>{l}</button>)}</div>
       {tab === 'reorder' && <Reorder />}
       {tab === 'proposals' && <Proposals />}
       {tab === 'stockouts' && <Stockouts />}
+      {tab === 'transfers' && <Transfers />}
       {tab === 'suppliers' && <Suppliers />}
       {tab === 'invoices' && <Invoices />}
       {tab === 'garde' && <Garde />}
     </>
+  );
+}
+
+interface NetStock { tenantId: string; tenantName: string; productId: string; productName: string; stock: number }
+interface TransferRow { id: string; requestingTenantId: string; requestingTenantName: string; targetTenantId: string; targetTenantName: string; productName: string; targetProductId?: string | null; quantity: number; status: string; note?: string | null; createdAt: string }
+const XFER_STATUS: Record<string, ['ok' | 'warn' | 'bad' | 'info' | 'muted', string]> = { pending: ['warn', 'en attente'], accepted: ['info', 'accepté'], rejected: ['bad', 'refusé'], shipped: ['info', 'expédié'], received: ['ok', 'reçu'], cancelled: ['muted', 'annulé'] };
+
+/** Transferts de stock entre pharmacies d'un même réseau : chercher avant de commander chez un grossiste. */
+function Transfers() {
+  const [q, setQ] = useState('');
+  const { data: results, error: searchErr } = useLoad(() => (q.trim().length >= 2 ? api<NetStock[]>(`/network/stock?q=${encodeURIComponent(q.trim())}`) : Promise.resolve([])), [q]);
+  const { data: requests, error, reload } = useLoad(() => api<TransferRow[]>('/network/requests'), []);
+  const [asking, setAsking] = useState<NetStock | null>(null);
+  const [qty, setQty] = useState(1);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const write = can('purchases.write');
+  async function ask() {
+    if (!asking) return;
+    setBusy(true); setErr(null);
+    try { await api('/network/requests', { method: 'POST', json: { targetTenantId: asking.tenantId, productName: asking.productName, targetProductId: asking.productId, quantity: qty, note: note.trim() || undefined } }); setAsking(null); setQty(1); setNote(''); reload(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  }
+  async function act(id: string, action: string) {
+    try { await api(`/network/requests/${id}/${action}`, { method: 'POST' }); reload(); } catch { /* affiché via ErrorBox au prochain chargement */ }
+  }
+  return (
+    <div className="space-y-4">
+      <div className="card">
+        <h3 className="mb-1 font-extrabold">Chercher dans le réseau</h3>
+        <p className="mb-3 text-xs text-ink-muted">Avant de commander chez un grossiste, voyez si une pharmacie de votre réseau a le produit en stock. Réseau à configurer dans Panneau d’administration → Réseau de pharmacies.</p>
+        <input className="w-full" placeholder="Nom du produit, DCI ou code-barres…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <ErrorBox error={searchErr} />
+        {results && results.length > 0 && (
+          <table className="mt-3 w-full text-sm"><tbody>
+            {results.map((r) => (
+              <tr key={`${r.tenantId}-${r.productId}`}>
+                <td className="py-1">{r.productName}</td>
+                <td className="py-1 text-xs text-ink-muted">{r.tenantName}</td>
+                <td className="py-1 text-center">{r.stock} en stock</td>
+                {write && <td className="py-1 text-right"><button className="btn-alt !py-1 text-xs" onClick={() => setAsking(r)}>Demander un transfert</button></td>}
+              </tr>
+            ))}
+          </tbody></table>
+        )}
+        {q.trim().length >= 2 && results && !results.length && <p className="mt-2 text-xs text-ink-muted">Rien trouvé dans le réseau.</p>}
+      </div>
+
+      {asking && (
+        <Modal title={`Transfert — ${asking.productName}`} onClose={() => setAsking(null)}>
+          <p className="mb-3 text-sm text-ink-muted">Demande envoyée à <b>{asking.tenantName}</b> ({asking.stock} en stock).</p>
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-ink-muted">Quantité<input type="number" min={1} max={asking.stock} className="mt-1 w-24" value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))} /></label>
+            <label className="block text-xs font-bold text-ink-muted">Note (optionnel)<input className="mt-1 w-full" value={note} onChange={(e) => setNote(e.target.value)} /></label>
+          </div>
+          <ErrorBox error={err} />
+          <button className="btn mt-3 w-full" disabled={busy} onClick={ask}>{busy ? 'Envoi…' : 'Envoyer la demande'}</button>
+        </Modal>
+      )}
+
+      <div className="card">
+        <h3 className="mb-3 font-extrabold">Mes demandes de transfert</h3>
+        <ErrorBox error={error} />
+        <table className="w-full text-sm"><thead><tr><th className="text-left">Produit</th><th className="text-left">Sens</th><th>Qté</th><th>Statut</th>{write && <th />}</tr></thead><tbody>
+          {requests?.map((r) => {
+            const [tone, label] = XFER_STATUS[r.status] ?? ['muted', r.status];
+            return (
+              <tr key={r.id}>
+                <td className="py-1">{r.productName}{r.note ? <span className="block text-xs text-ink-muted">{r.note}</span> : null}</td>
+                <td className="py-1 text-xs text-ink-muted">→ {r.targetTenantName} <span className="text-ink-muted">(de {r.requestingTenantName})</span></td>
+                <td className="py-1 text-center">{r.quantity}</td>
+                <td className="py-1 text-center"><Badge tone={tone}>{label}</Badge></td>
+                {write && (
+                  <td className="py-1 text-right text-xs">
+                    {r.status === 'pending' && <><button className="btn-alt !py-1" onClick={() => act(r.id, 'accept')}>Accepter</button> <button className="ml-1 font-bold text-red-700" onClick={() => act(r.id, 'reject')}>Refuser</button> <button className="ml-1 text-ink-muted" onClick={() => act(r.id, 'cancel')}>Annuler ma demande</button></>}
+                    {r.status === 'accepted' && <button className="btn-alt !py-1" onClick={() => act(r.id, 'ship')}>Marquer expédié</button>}
+                    {r.status === 'shipped' && <button className="btn-alt !py-1" onClick={() => act(r.id, 'receive')}>Marquer reçu</button>}
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+          {requests && !requests.length && <tr><td colSpan={5} className="py-3 text-center text-xs text-ink-muted">Aucune demande de transfert.</td></tr>}
+        </tbody></table>
+      </div>
+    </div>
   );
 }
 

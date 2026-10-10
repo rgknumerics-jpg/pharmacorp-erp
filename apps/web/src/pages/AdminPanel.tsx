@@ -16,6 +16,37 @@ export const MODULES: [string, string, string, string][] = [
   ['ai', '🤖', 'Assistant IA (Pilotage)', 'Répond en langage naturel aux questions sur le chiffre d’affaires, les marges, le stock. Coût réel mais faible (plafond mensuel ci-dessous).'],
 ];
 
+interface NetworkSettings { networkCode: string | null; peers: { id: string; name: string }[] }
+
+/** Réseau de pharmacies : un code partagé entre plusieurs installations PharmaCorp permet les transferts de stock
+ * entre elles (Achats → Transferts), avant de commander chez un grossiste. */
+function NetworkSection() {
+  const { data, setData, error } = useLoad(() => api<NetworkSettings>('/network/settings'), []);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  if (data && code === '' && data.networkCode) setCode(data.networkCode);
+  async function save() {
+    setBusy(true); setErr(null); setMsg(null);
+    try { setData(await api<NetworkSettings>('/network/settings', { method: 'PUT', json: { networkCode: code.trim() || null } })); setMsg('Enregistré.'); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  }
+  return (
+    <div className="card mt-4 space-y-3">
+      <div><h3 className="text-lg font-extrabold">Réseau de pharmacies</h3><p className="text-xs text-ink-muted">Donnez le même code à plusieurs installations PharmaCorp pour qu'elles se voient mutuellement et puissent se demander des transferts de stock (Achats → Transferts), avant de commander chez un grossiste.</p></div>
+      <ErrorBox error={error ?? err} />
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="block text-xs font-bold text-ink-muted">Code réseau<input className="mt-1 w-64" placeholder="Ex. GROUPE-NDOLO" value={code} onChange={(e) => setCode(e.target.value)} /></label>
+        <button className="btn" disabled={busy} onClick={save}>Enregistrer</button>
+        {msg && <span className="text-sm font-bold text-brand">✓ {msg}</span>}
+      </div>
+      {data?.networkCode && (
+        <p className="text-xs text-ink-muted">{data.peers.length ? `Pharmacies du réseau : ${data.peers.map((p) => p.name).join(', ')}.` : 'Aucune autre pharmacie n’utilise encore ce code.'}</p>
+      )}
+    </div>
+  );
+}
+
 /** Panneau d'administration (titulaire / super-administrateur uniquement) : fonctions visibles, politique de caisse, protections et visibilités. */
 export default function AdminPanel({ go }: { go: (p: string) => void }) {
   const { data, error, setData } = useLoad(() => api<any>('/company/settings'), []);
@@ -67,6 +98,7 @@ export default function AdminPanel({ go }: { go: (p: string) => void }) {
         <p className="text-sm text-ink-muted">Les écrans, les taux de TVA, les fournisseurs et les dépôts visibles se règlent rôle par rôle. Ce qui est masqué à un rôle disparaît aussi des totaux qu’il consulte (valeur du stock, ventes, caisse).</p>
         <div className="flex flex-wrap gap-2"><button className="btn-alt" onClick={() => go('team')}>Droits des rôles, TVA, fournisseurs et dépôts visibles →</button></div>
       </div>
+      <NetworkSection />
       <SettingsSection />
     </>
   );
