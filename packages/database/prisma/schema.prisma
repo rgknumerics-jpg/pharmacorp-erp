@@ -90,6 +90,7 @@ model Tenant {
   aiUsageMonthly AiUsageMonthly[]
 
   depots Depot[]
+  stockoutLogs StockoutLog[]
 
   @@map("tenants")
 }
@@ -110,6 +111,7 @@ model User {
   memberships   Membership[]
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
+  stockoutLogs  StockoutLog[]
 
   @@map("users")
 }
@@ -344,11 +346,32 @@ model Product {
   movements InventoryMovement[]
   poItems   PurchaseOrderItem[]
   saleItems SaleItem[]
+  stockoutLogs StockoutLog[]
 
   @@unique([tenantId, sku])
   @@index([tenantId, name])
   @@index([tenantId, barcode])
   @@map("products")
+}
+
+/// Journal des ruptures (ARCHITECTURE.md -- Achats) : chaque fois qu'un vendeur voit un produit a 0 en
+/// stock dans la recherche de vente, l'evenement s'enregistre automatiquement. Alimente les propositions
+/// d'achat et la mesure des ventes perdues.
+model StockoutLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  productId   String?  @map("product_id") @db.Uuid
+  productName String   @map("product_name")
+  userId      String?  @map("user_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  user    User?    @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, productId])
+  @@map("stockout_logs")
 }
 
 model Supplier {

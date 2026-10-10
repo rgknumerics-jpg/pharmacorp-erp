@@ -2,6 +2,7 @@ import { scopeOf, visibleProductIds } from '../common/vat-scope';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@erp/database';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { StockoutsService } from '../stockouts/stockouts.service';
 import { AuthenticatedUser } from '../common/interfaces/jwt-payload.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto, CreateProductDto, UpdateProductDto } from './dto/product.dto';
@@ -19,6 +20,7 @@ export class CatalogService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService,
+    private readonly stockouts: StockoutsService,
   ) {}
 
   /**
@@ -59,6 +61,13 @@ export class CatalogService {
       }
       return list.map((p) => ({ p, stock: withStock ? stock.get(p.id) ?? 0 : undefined, detail: withStock ? !!(p.unitsPerBox && p.unitsPerBox > 1) || detail.has(p.id) : undefined }));
     });
+    // Journal des ruptures : un produit cherche par nom et trouve a 0 en stock (hors format detaillable,
+    // qui n'est pas un vrai manque -- voir CatalogService.search ci-dessus) s'enregistre automatiquement,
+    // sans ralentir la reponse (non attendu).
+    if (withStock && words.length) {
+      const misses = rows.filter((r) => r.stock === 0 && !r.detail).map((r) => ({ productId: r.p.id, name: r.p.name }));
+      this.stockouts.logMisses(user.tenantId, user.userId, misses);
+    }
     return rows.map((r) => ({ ...serializeProduct(r.p, user), ...(r.stock !== undefined ? { stock: r.stock, detail: r.detail } : {}) }));
   }
 

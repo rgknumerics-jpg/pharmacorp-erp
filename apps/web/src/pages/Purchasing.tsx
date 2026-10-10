@@ -8,17 +8,48 @@ import { Badge, ErrorBox, Field, Modal, PageTitle, useLoad } from '../components
 const ST: Record<string, ['ok' | 'warn' | 'bad' | 'info' | 'muted', string]> = { rupture: ['bad', 'rupture'], critique: ['bad', 'critique'], a_commander: ['warn', 'à commander'], surstock: ['info', 'surstock'], ok: ['ok', 'ok'], sans_vente: ['muted', 'sans vente'] };
 
 export default function Purchasing() {
-  const [tab, setTab] = useState<'proposals' | 'reorder' | 'suppliers' | 'invoices' | 'garde'>('proposals');
+  const [tab, setTab] = useState<'proposals' | 'reorder' | 'stockouts' | 'suppliers' | 'invoices' | 'garde'>('proposals');
   return (
     <>
       <PageTitle title="Achats" sub="Quoi commander, chez qui, quand payer — et les semaines de garde" />
-      <div className="mb-3 flex flex-wrap gap-2">{([['proposals', 'Propositions de commande'], ['reorder', 'Réapprovisionnement'], ['suppliers', 'Fournisseurs'], ['invoices', 'Échéances fournisseurs'], ['garde', 'Semaines de garde']] as const).map(([k, l]) => <button key={k} className={tab === k ? 'btn' : 'btn-alt'} onClick={() => setTab(k)}>{l}</button>)}</div>
+      <div className="mb-3 flex flex-wrap gap-2">{([['proposals', 'Propositions de commande'], ['reorder', 'Réapprovisionnement'], ['stockouts', 'Ruptures recherchées'], ['suppliers', 'Fournisseurs'], ['invoices', 'Échéances fournisseurs'], ['garde', 'Semaines de garde']] as const).map(([k, l]) => <button key={k} className={tab === k ? 'btn' : 'btn-alt'} onClick={() => setTab(k)}>{l}</button>)}</div>
       {tab === 'reorder' && <Reorder />}
       {tab === 'proposals' && <Proposals />}
+      {tab === 'stockouts' && <Stockouts />}
       {tab === 'suppliers' && <Suppliers />}
       {tab === 'invoices' && <Invoices />}
       {tab === 'garde' && <Garde />}
     </>
+  );
+}
+
+interface StockoutSummary { productId: string | null; productName: string; count: number }
+interface StockoutRow { id: string; productName: string; userName: string; createdAt: string }
+
+/** Journal des ruptures : produits recherches par un vendeur et trouves a 0 en stock (enregistre automatiquement a la vente). */
+function Stockouts() {
+  const [days, setDays] = useState(30);
+  const { data: summary, error } = useLoad(() => api<StockoutSummary[]>(`/stockouts/summary?days=${days}`), [days]);
+  const { data: recent } = useLoad(() => api<StockoutRow[]>('/stockouts?take=50'), []);
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <div className="card">
+        <h3 className="mb-1 font-extrabold">Produits les plus recherchés en rupture</h3>
+        <p className="mb-3 text-xs text-ink-muted">Sur les <select className="inline-block w-auto" value={days} onChange={(e) => setDays(Number(e.target.value))}><option value={7}>7</option><option value={30}>30</option><option value={90}>90</option></select> derniers jours — un produit en haut de liste mérite d'être recommandé ou référencé, même s'il n'est pas en rupture officielle.</p>
+        <ErrorBox error={error} />
+        <table className="w-full text-sm"><tbody>
+          {summary?.map((s) => <tr key={s.productId ?? s.productName}><td className="py-1">{s.productName}</td><td className="py-1 text-right"><Badge tone={s.count >= 5 ? 'bad' : 'warn'}>{s.count}×</Badge></td></tr>)}
+          {summary && !summary.length && <tr><td className="py-2 text-xs text-ink-muted">Aucune recherche en rupture sur la période.</td></tr>}
+        </tbody></table>
+      </div>
+      <div className="card">
+        <h3 className="mb-3 font-extrabold">Dernières recherches en rupture</h3>
+        <table className="w-full text-sm"><tbody>
+          {recent?.map((r) => <tr key={r.id}><td className="py-1">{r.productName}</td><td className="py-1 text-xs text-ink-muted">{r.userName}</td><td className="py-1 text-right text-xs text-ink-muted">{dateFr(r.createdAt)}</td></tr>)}
+          {recent && !recent.length && <tr><td className="py-2 text-xs text-ink-muted">Aucune recherche enregistrée.</td></tr>}
+        </tbody></table>
+      </div>
+    </div>
   );
 }
 
