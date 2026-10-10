@@ -1,3 +1,11 @@
+-- Toute FK vers une table existante exige le droit REFERENCES sur cette table, accorde AVANT de creer la
+-- contrainte (pas apres : lecon du 2026-10-09 et du 2026-10-10 -- un GRANT place plus bas dans ce meme fichier
+-- arrive trop tard pour les ALTER TABLE qui le precedent). Idempotent, donc sans risque a rejouer.
+GRANT REFERENCES ON "tenants" TO erp_app;
+GRANT REFERENCES ON "products" TO erp_app;
+GRANT REFERENCES ON "users" TO erp_app;
+GRANT REFERENCES ON "customers" TO erp_app;
+
 -- Avoirs clients : produit indisponible mais trouvable chez un grossiste. Document imprimable (2 exemplaires),
 -- retrait trace ; ne touche ni le stock ni la caisse (la vente reelle se fait au retrait, normalement).
 CREATE TABLE "product_holds" (
@@ -30,10 +38,3 @@ ALTER TABLE "product_holds" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "product_holds" FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation_product_holds ON "product_holds" USING (tenant_id::text = current_setting('app.current_tenant_id', true));
 GRANT SELECT, INSERT, UPDATE, DELETE ON "product_holds" TO erp_app;
--- Toute nouvelle FK vers une table existante exige le droit REFERENCES sur cette table. GRANT est idempotent :
--- on les reaffirme tous ici (pas seulement "customers", nouveau) pour qu'une base reconstruite de zero (dev,
--- CI) les obtienne aussi, sans dependre des corrections manuelles faites en production le 2026-10-09.
-GRANT REFERENCES ON "tenants" TO erp_app;
-GRANT REFERENCES ON "products" TO erp_app;
-GRANT REFERENCES ON "users" TO erp_app;
-GRANT REFERENCES ON "customers" TO erp_app;
